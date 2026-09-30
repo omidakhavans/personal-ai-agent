@@ -84,6 +84,19 @@ class PlaceholderStageExecutor:
         )
 
 
+class RoutedStageExecutor:
+    """Routes implemented stages to their executor and preserves placeholders elsewhere."""
+
+    def __init__(self, *, research_work: StageExecutor, fallback: StageExecutor | None = None) -> None:
+        self.research_work = research_work
+        self.fallback = fallback or PlaceholderStageExecutor()
+
+    def execute(self, *, stage: Stage, subject: str, run_dir: Path) -> StageResult:
+        if stage.name == "research-work":
+            return self.research_work.execute(stage=stage, subject=subject, run_dir=run_dir)
+        return self.fallback.execute(stage=stage, subject=subject, run_dir=run_dir)
+
+
 class MappingStageExecutor:
     """Test helper executor that can override stage outcomes."""
 

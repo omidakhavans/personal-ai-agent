@@ -3,7 +3,13 @@ from __future__ import annotations
 import unittest
 from tempfile import TemporaryDirectory
 from pathlib import Path
+from typing import Any
 
+from personal_ai_agent.research_work import (
+    ResearchWorkExecutor,
+    ResearchWorkSettings,
+    collect_local_evidence,
+)
 from personal_ai_agent.runtime import Orchestrator
 from personal_ai_agent.stages import (
     STAGE_BLOCKED,
@@ -12,6 +18,7 @@ from personal_ai_agent.stages import (
     STAGE_PENDING,
     STAGE_RUNNING,
     MappingStageExecutor,
+    RoutedStageExecutor,
     StageResult,
 )
 from personal_ai_agent.state import (
@@ -137,6 +144,88 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(resume_executor.calls[0], "build-evidence-context")
             self.assertNotIn("research-work", resume_executor.calls)
             self.assertNotIn("research-resources", resume_executor.calls)
+
+
+class FakeModelClient:
+    def __init__(self, report: dict[str, Any]) -> None:
+        self.report = report
+        self.calls: list[dict[str, str]] = []
+
+    def generate_json(self, *, model: str, instructions: str, input_text: str) -> dict[str, Any]:
+        self.calls.append({"model": model, "instructions": instructions, "input": input_text})
+        return self.report
+
+
+def valid_research_report() -> dict[str, Any]:
+    claim = {"status": "Verified", "claim": "A tool-calling feature is documented.", "evidence_ids": ["E1"]}
+    return {
+        "executive_summary": [claim],
+        "what_was_implemented": [claim],
+        "technical_decisions": [],
+        "problems_encountered": [],
+        "solutions_or_approaches": [],
+        "technologies_and_concepts": ["tool calling"],
+        "potential_lessons": [],
+        "unknowns": ["Motivation is not established by the inspected evidence."],
+    }
+
+
+class ResearchWorkTests(unittest.TestCase):
+    def test_collects_narrow_subject_evidence(self) -> None:
+        with TemporaryDirectory() as tmp:
+            repository = Path(tmp)
+            (repository / "README.md").write_text("# Demo\n\nTool calling powers the rewrite flow.\n", encoding="utf-8")
+            (repository / "unrelated.md").write_text("Nothing relevant here.\n", encoding="utf-8")
+
+            evidence = collect_local_evidence("What I learned about tool calling", repository)
+
+            self.assertEqual(evidence.search_terms, ("tool", "calling"))
+            self.assertEqual(evidence.items[0].reference, "README.md")
+            self.assertIn("Tool calling", evidence.items[0].content)
+
+    def test_real_research_stage_writes_grounded_report_then_pipeline_continues(self) -> None:
+        with TemporaryDirectory() as tmp:
+            repository = Path(tmp) / "repository"
+            repository.mkdir()
+            (repository / "README.md").write_text("# Demo\n\nTool calling powers the rewrite flow.\n", encoding="utf-8")
+            runs_dir = Path(tmp) / "runs"
+            model = FakeModelClient(valid_research_report())
+            research = ResearchWorkExecutor(
+                settings=ResearchWorkSettings(repository=repository, model="test-model"),
+                client=model,
+            )
+
+            state = Orchestrator(
+                runs_dir=runs_dir,
+                executor=RoutedStageExecutor(research_work=research),
+            ).start("What I learned about tool calling")
+            report = (paths_for_run(runs_dir, state["run_id"]).run_dir / "research-report.md").read_text(encoding="utf-8")
+
+            self.assertEqual(state["status"], RUN_COMPLETED)
+            self.assertEqual(len(model.calls), 1)
+            self.assertIn("Verified: A tool-calling feature is documented. (Evidence: E1)", report)
+            self.assertIn("`E1`: `README.md`", report)
+
+    def test_insufficient_evidence_blocks_without_calling_model(self) -> None:
+        with TemporaryDirectory() as tmp:
+            repository = Path(tmp) / "repository"
+            repository.mkdir()
+            (repository / "README.md").write_text("# Unrelated project\n", encoding="utf-8")
+            runs_dir = Path(tmp) / "runs"
+            model = FakeModelClient(valid_research_report())
+            research = ResearchWorkExecutor(
+                settings=ResearchWorkSettings(repository=repository, model="test-model"),
+                client=model,
+            )
+
+            state = Orchestrator(
+                runs_dir=runs_dir,
+                executor=RoutedStageExecutor(research_work=research),
+            ).start("Tool calling")
+
+            self.assertEqual(state["status"], RUN_BLOCKED)
+            self.assertEqual(state["stages"]["research-work"]["status"], STAGE_BLOCKED)
+            self.assertEqual(model.calls, [])
 
 
 if __name__ == "__main__":

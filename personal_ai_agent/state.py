@@ -40,10 +40,15 @@ def paths_for_run(runs_dir: Path, run_id: str) -> RunPaths:
     return RunPaths(runs_dir=runs_dir, run_dir=run_dir, state_path=run_dir / "state.json")
 
 
-def initial_state(run_id: str, subject: str) -> dict[str, Any]:
+def initial_state(
+    run_id: str,
+    subject: str,
+    inputs: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     return {
         "run_id": run_id,
         "subject": subject,
+        "inputs": inputs or {},
         "status": RUN_PENDING,
         "current_stage": WORKFLOW_STAGES[0].name,
         "created_at": utc_now(),

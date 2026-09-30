@@ -28,11 +28,12 @@ Agent = Runtime + Model + Tools + Instructions + State
 
 The runtime coordinates execution and persistence. The model provides reasoning and language generation. Tools provide external actions. Instructions define behavior. State records what has happened.
 
-Step 1 implements only the runtime skeleton. The model and real tools come later.
+Step 1 implemented the runtime skeleton. Step 2 begins replacing one placeholder
+with a real capability, starting with grounded repository research.
 
 ## Runtime Shape
 
-Current Step 1 shape:
+Current runtime shape:
 
 ```text
 CLI
@@ -79,6 +80,26 @@ runs/<run-id>/state.json
 ```
 
 The state tracks the subject, run status, current stage, per-stage status, artifact names, messages, and timestamps.
+
+For real stages, it also records non-secret inputs needed to resume consistently,
+such as the repository path and selected model. API keys never enter this state.
+
+## Grounded Research
+
+The `research-work` stage is intentionally split into two responsibilities:
+
+```text
+local evidence collector -> bounded evidence bundle -> model interpretation -> validated report
+```
+
+The collector reads a small, subject-matched set of repository files and scoped
+Git metadata. The model receives that selected bundle, not unrestricted filesystem
+access. The runtime validates that every `Verified` model claim cites a supplied
+evidence identifier before it persists the Markdown report.
+
+This does not prove every claim is true: the model can still misinterpret an
+excerpt. It does make the claim inspectable and prevents the model from citing
+invented source identifiers.
 
 ## Resumability
 

@@ -7,8 +7,10 @@ import json
 from pathlib import Path
 from typing import Sequence
 
+from .research_work import OpenAIResponsesClient, ResearchWorkExecutor, ResearchWorkSettings
 from .runtime import Orchestrator, RuntimeErrorWithContext
 from .state import paths_for_run, read_state
+from .stages import RoutedStageExecutor
 
 
 DEFAULT_RUNS_DIR = Path("runs")
@@ -29,9 +31,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_parser = subparsers.add_parser("run", help="Start a new content workflow run.")
     run_parser.add_argument("subject", help="Subject for the workflow.")
+    run_parser.add_argument(
+        "--repository",
+        required=True,
+        help="Read-only local repository to research during the first stage.",
+    )
+    run_parser.add_argument(
+        "--model",
+        default="gpt-4.1-mini",
+        help="OpenAI model for research-work. Defaults to gpt-4.1-mini.",
+    )
 
     resume_parser = subparsers.add_parser("resume", help="Resume an incomplete run.")
     resume_parser.add_argument("run_id", help="Run id to resume.")
+    resume_parser.add_argument("--repository", help="Override the repository saved with the run.")
+    resume_parser.add_argument("--model", help="Override the model saved with the run.")
 
     state_parser = subparsers.add_parser("show-state", help="Print a run state.json.")
     state_parser.add_argument("run_id", help="Run id to inspect.")
@@ -46,12 +60,26 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         if args.command == "run":
-            state = Orchestrator(runs_dir=runs_dir).start(args.subject)
+            executor = build_content_executor(Path(args.repository), args.model)
+            state = Orchestrator(runs_dir=runs_dir, executor=executor).start(
+                args.subject,
+                inputs={"repository": str(Path(args.repository).expanduser().resolve()), "model": args.model},
+            )
             print_run_result(state, runs_dir)
             return 0
 
         if args.command == "resume":
-            state = Orchestrator(runs_dir=runs_dir).resume(args.run_id)
+            previous = read_state(paths_for_run(runs_dir, args.run_id).state_path)
+            repository = args.repository or previous.get("inputs", {}).get("repository")
+            model = args.model or previous.get("inputs", {}).get("model")
+            if not repository or not model:
+                raise RuntimeErrorWithContext(
+                    "This run has no saved research configuration. Pass --repository and --model."
+                )
+            state = Orchestrator(
+                runs_dir=runs_dir,
+                executor=build_content_executor(Path(repository), model),
+            ).resume(args.run_id)
             print_run_result(state, runs_dir)
             return 0
 
@@ -73,6 +101,14 @@ def print_run_result(state: dict, runs_dir: Path) -> None:
     print(f"status: {state['status']}")
     print(f"state: {paths.state_path}")
     print(f"artifacts: {paths.run_dir}")
+
+
+def build_content_executor(repository: Path, model: str) -> RoutedStageExecutor:
+    research_work = ResearchWorkExecutor(
+        settings=ResearchWorkSettings(repository=repository, model=model),
+        client=OpenAIResponsesClient(),
+    )
+    return RoutedStageExecutor(research_work=research_work)
 
 
 if __name__ == "__main__":

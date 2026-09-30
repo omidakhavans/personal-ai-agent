@@ -47,25 +47,43 @@ subject
   -> write-x
 ```
 
+## Step 2: Grounded `research-work`
+
+Status: Complete.
+
+Implemented:
+
+- A read-only, configured repository input for new runs.
+- Narrow local evidence collection from subject-matched text files and scoped Git metadata.
+- A raw, SDK-free OpenAI Responses API client.
+- Structured JSON output validation before report rendering.
+- Traceable evidence identifiers in `research-report.md`.
+- An explicit `blocked` result when no local evidence matches the subject.
+- Persisted non-secret run inputs so an incomplete run can be resumed.
+
+The model has no direct repository access. Application code collects the small
+evidence bundle first, then the model interprets that bundle. This is the first
+practical grounding boundary in the custom runtime.
+
 ## Recommended Next Phase 2 Task
 
-Add the first raw LLM-powered capability for `research-work`.
+Add a real `research-resources` capability.
 
 Why this should come next:
 
-- The runtime lifecycle now exists and can execute, persist, block, fail, and resume.
-- `research-work` is the first stage in the workflow, so replacing its placeholder with a real capability gives the rest of the pipeline meaningful input.
-- It is the best place to learn the next layer of agent internals: model calls, prompt construction, local tool access, evidence extraction, and explicit blocked decisions when evidence is insufficient.
+- `research-work` can now produce a grounded local evidence report.
+- External or user-supplied references are the next missing input to the evidence-context stage.
+- It extends the same pattern: controlled inputs, source references, structured model output, and explicit uncertainty.
 
 Suggested scope:
 
 ```text
-research-work executor
-  -> inspect a configured local repository
-  -> collect narrow file/git evidence
+research-resources executor
+  -> accept explicit URLs and local reference paths
+  -> collect bounded resource text and source metadata
   -> call a raw LLM API with bounded context
-  -> write research-report.md
-  -> return completed or blocked
+  -> write resources-report.md
+  -> return completed, skipped, or blocked
 ```
 
 Do not implement this until explicitly requested.

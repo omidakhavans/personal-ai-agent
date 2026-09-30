@@ -6,9 +6,11 @@ This repository starts rebuilding the Phase 1 Content Agent outside Codex. Phase
 
 ## Current Status
 
-Step 1 is a minimal local runtime skeleton.
+Step 2 begins with a real, LLM-powered `research-work` stage. The remaining
+stages are still placeholders.
 
-It does not call an LLM yet. Each workflow stage uses a placeholder executor that writes a Markdown artifact, so we can validate runtime lifecycle concerns first:
+The runtime lifecycle was validated first with placeholder stages. It now has one
+real stage while the remaining stages still use placeholders:
 
 - run creation
 - run directories
@@ -18,6 +20,11 @@ It does not call an LLM yet. Each workflow stage uses a placeholder executor tha
 - failed vs blocked outcomes
 - resume behavior
 - skipping completed stages during resume
+
+`research-work` now gathers a narrow local evidence bundle from a configured
+repository, asks a raw OpenAI API call to interpret only that bundle, validates
+the structured response, and writes `research-report.md`. It blocks before the
+model call when no matching evidence is available.
 
 ## Workflow
 
@@ -37,10 +44,12 @@ The stage names mirror the Phase 1 behavior. `research-work` maps back to the Ph
 
 ## CLI
 
-Start a new run:
+Start a new run. Set `OPENAI_API_KEY` in your shell first; it is never saved in
+run state or artifacts.
 
 ```bash
-python -m personal_ai_agent run "What I learned building tool calling"
+python -m personal_ai_agent run "What I learned building tool calling" \
+  --repository "/path/to/the/project-you-want-to-research"
 ```
 
 Resume an incomplete run:
@@ -58,8 +67,13 @@ python -m personal_ai_agent show-state <run-id>
 Use a custom runs directory:
 
 ```bash
-python -m personal_ai_agent --runs-dir /tmp/personal-agent-runs run "My subject"
+python -m personal_ai_agent --runs-dir /tmp/personal-agent-runs run "My subject" \
+  --repository "/path/to/project"
 ```
+
+Pass `--model <name>` to select a model for a new run. The repository and model
+are persisted as non-secret run inputs so `resume` can recreate the stage
+configuration.
 
 ## Tests
 

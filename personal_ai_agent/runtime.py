@@ -45,11 +45,16 @@ class Orchestrator:
         self.runs_dir = runs_dir
         self.executor = executor or PlaceholderStageExecutor()
 
-    def start(self, subject: str) -> dict[str, Any]:
+    def start(
+        self,
+        subject: str,
+        *,
+        inputs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         run_id = new_run_id()
         paths = paths_for_run(self.runs_dir, run_id)
         paths.run_dir.mkdir(parents=True, exist_ok=False)
-        state = initial_state(run_id=run_id, subject=subject)
+        state = initial_state(run_id=run_id, subject=subject, inputs=inputs)
         write_state(paths.state_path, state)
         return self._advance(state=state, state_path=paths.state_path, run_dir=paths.run_dir)
 
