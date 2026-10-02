@@ -96,6 +96,12 @@ Run tests with the standard library:
 python -m unittest discover -s tests
 ```
 
+## Learn The Runtime
+
+Start with [Phase 2 Learning Path](docs/learning/README.md). It links the
+end-to-end build guide, runtime walkthrough, and one focused explanation for
+each implemented stage.
+
 ## Relationship To Phase 1
 
 ```text

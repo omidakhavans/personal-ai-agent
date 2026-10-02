@@ -102,6 +102,12 @@ This is the first context-engineering stage. It reduces and structures prior
 research before later generation, rather than asking a writer to recover the
 important facts from every raw artifact.
 
+## Learning Documentation
+
+The current Phase 2 learning sequence lives in `docs/learning/README.md`.
+It starts with the end-to-end build guide, then moves into the runtime and stage
+walkthroughs. Keep a new stage walkthrough beside every future real capability.
+
 ## Recommended Next Phase 2 Task
 
 Add a real `write-blog` capability.
