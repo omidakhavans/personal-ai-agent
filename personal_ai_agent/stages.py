@@ -87,13 +87,26 @@ class PlaceholderStageExecutor:
 class RoutedStageExecutor:
     """Routes implemented stages to their executor and preserves placeholders elsewhere."""
 
-    def __init__(self, *, research_work: StageExecutor, fallback: StageExecutor | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        research_work: StageExecutor,
+        research_resources: StageExecutor | None = None,
+        evidence_context: StageExecutor | None = None,
+        fallback: StageExecutor | None = None,
+    ) -> None:
         self.research_work = research_work
+        self.research_resources = research_resources
+        self.evidence_context = evidence_context
         self.fallback = fallback or PlaceholderStageExecutor()
 
     def execute(self, *, stage: Stage, subject: str, run_dir: Path) -> StageResult:
         if stage.name == "research-work":
             return self.research_work.execute(stage=stage, subject=subject, run_dir=run_dir)
+        if stage.name == "research-resources" and self.research_resources:
+            return self.research_resources.execute(stage=stage, subject=subject, run_dir=run_dir)
+        if stage.name == "build-evidence-context" and self.evidence_context:
+            return self.evidence_context.execute(stage=stage, subject=subject, run_dir=run_dir)
         return self.fallback.execute(stage=stage, subject=subject, run_dir=run_dir)
 
 

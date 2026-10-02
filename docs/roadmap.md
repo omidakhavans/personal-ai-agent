@@ -65,25 +65,63 @@ The model has no direct repository access. Application code collects the small
 evidence bundle first, then the model interprets that bundle. This is the first
 practical grounding boundary in the custom runtime.
 
+## Step 3: Grounded `research-resources`
+
+Status: Complete.
+
+Implemented:
+
+- Explicit `--resource` inputs for local text paths and HTTP(S) URLs.
+- Bounded resource reads, including direct public GitHub repository README support.
+- A `resources-report.md` contract with traceable resource IDs.
+- A `skipped` result when no optional resources were supplied.
+- A `blocked` result when supplied resources are all inaccessible.
+- Shared raw model client and structured-output validation with the first stage.
+
+The runtime does not independently discover web resources in V1. That is an
+intentional safety and scope boundary: resource research starts from sources the
+user chose, rather than a model-selected web search.
+
+## Step 4: Grounded `build-evidence-context`
+
+Status: Complete.
+
+Implemented:
+
+- Context input reads from the current run's `research-report.md` and optional
+  `resources-report.md` only.
+- Extracted work (`E…`) and resource (`R…`) IDs from those reports.
+- A compact, structured `context-brief.md` with claim labels and source links.
+- Validation that prevents invented evidence IDs and requires both source types
+  for work-resource connections.
+- A `blocked` result when work research is missing or when the model cannot
+  recommend an evidence-supported article focus.
+- A work-only brief with an explicit limitation when resource research is absent.
+
+This is the first context-engineering stage. It reduces and structures prior
+research before later generation, rather than asking a writer to recover the
+important facts from every raw artifact.
+
 ## Recommended Next Phase 2 Task
 
-Add a real `research-resources` capability.
+Add a real `write-blog` capability.
 
 Why this should come next:
 
-- `research-work` can now produce a grounded local evidence report.
-- External or user-supplied references are the next missing input to the evidence-context stage.
-- It extends the same pattern: controlled inputs, source references, structured model output, and explicit uncertainty.
+- `research-work` and `research-resources` now produce traceable source reports.
+- `build-evidence-context` now reduces them to one high-signal, grounded brief.
+- A blog draft is the next canonical artifact from which later social content can derive.
 
 Suggested scope:
 
 ```text
-research-resources executor
-  -> accept explicit URLs and local reference paths
-  -> collect bounded resource text and source metadata
+write-blog executor
+  -> read context-brief.md
+  -> generate a technical article draft from selected evidence only
+  -> preserve source references and open uncertainties for human review
   -> call a raw LLM API with bounded context
-  -> write resources-report.md
-  -> return completed, skipped, or blocked
+  -> write blog-draft.md
+  -> return completed or blocked
 ```
 
 Do not implement this until explicitly requested.

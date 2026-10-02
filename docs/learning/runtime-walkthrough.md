@@ -3,15 +3,15 @@
 This document teaches how the Phase 2 runtime currently works. It is not general project documentation. It traces one complete CLI execution from command input to final stage completion, then explains failure, blocking, and resume behavior.
 
 The implementation is intentionally small. The runtime lifecycle was built first;
-the `research-work` stage now makes the first real, grounded model call while
-the remaining stages are placeholders.
+the `research-work`, `research-resources`, and `build-evidence-context` stages
+now make grounded model calls while the remaining stages are placeholders.
 
 ## How To Run It
 
 From the repository root:
 
 ```bash
-cd "/Users/a100200300/Local Sites/ai/app/public/wp-content/plugins/personal-ai-agent"
+cd <project-root>
 export OPENAI_API_KEY="..."
 python -m personal_ai_agent run "What I learned building tool calling" \
   --repository "/path/to/project-to-research"
@@ -82,7 +82,7 @@ Important functions/classes:
 
 `build_parser()` defines the commands:
 
-- `run <subject> --repository <path> [--model <name>]`
+- `run <subject> --repository <path> [--resource <path-or-url>] [--model <name>]`
 - `resume <run-id>`
 - `show-state <run-id>`
 
@@ -94,6 +94,7 @@ subject = What I learned building tool calling
 runs_dir = runs
 repository = /path/to/project-to-research
 model = gpt-4.1-mini
+resources = [optional supplied paths or URLs]
 ```
 
 Then it calls:
@@ -101,7 +102,7 @@ Then it calls:
 ```python
 Orchestrator(runs_dir=runs_dir, executor=build_content_executor(...)).start(
     args.subject,
-    inputs={"repository": "...", "model": "..."},
+    inputs={"repository": "...", "resources": [...], "model": "..."},
 )
 ```
 
@@ -297,8 +298,9 @@ result = self.executor.execute(
 ```
 
 For a CLI-created run, `build_content_executor()` in `personal_ai_agent/cli.py`
-creates a `RoutedStageExecutor`. It routes only `research-work` to
-`ResearchWorkExecutor` in `personal_ai_agent/research_work.py`; the rest use
+creates a `RoutedStageExecutor`. It routes `research-work` to
+`ResearchWorkExecutor`, `research-resources` to `ResourceResearchExecutor`, and
+`build-evidence-context` to `EvidenceContextExecutor`. The rest use
 `PlaceholderStageExecutor` for now.
 
 `ResearchWorkExecutor.execute()` has a small grounded sequence:
@@ -316,6 +318,11 @@ The collector uses subject-matched text excerpts and scoped Git metadata. It
 does not give the model shell or filesystem access. `OpenAIResponsesClient`
 makes one raw HTTP request, and `validate_report()` requires every `Verified`
 claim to cite an evidence ID that the collector actually supplied.
+
+`EvidenceContextExecutor.execute()` does not research again. It reads the
+earlier reports in the same run, extracts their `E…` and `R…` IDs, then creates
+`context-brief.md`. It rejects claims that cite invented IDs and requires an
+interpretation connecting work to resources to cite both kinds of evidence.
 
 Why it exists:
 
@@ -399,7 +406,7 @@ Then it writes the final `state.json`.
 Why it exists:
 
 - Ordinary software-engineering reason: a workflow needs a final success condition.
-- Agent-system reason: downstream processes need to know whether the full chain is usable. A completed run means the grounded research stage and all remaining placeholder stages reached terminal success for this version.
+- Agent-system reason: downstream processes need to know whether the full chain is usable. A completed run means the grounded research and context stages, plus the remaining placeholder stages, reached terminal success for this version.
 
 In the future, "completed" will not mean "published" or "perfect." It will mean the runtime successfully produced draft artifacts that still need human review.
 

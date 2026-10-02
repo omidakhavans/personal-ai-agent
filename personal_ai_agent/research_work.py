@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import json
-import os
 import re
 import subprocess
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
+from .model_client import ModelClient
 from .stages import STAGE_BLOCKED, STAGE_COMPLETED, Stage, StageResult
 
 
@@ -41,28 +38,8 @@ STOP_WORDS = {
 VALID_CLAIM_STATUSES = {"Verified", "Inference", "Unknown"}
 
 
-class ModelClient(Protocol):
-    """The deliberately small boundary between the runtime and one model provider."""
-
-    def generate_json(self, *, model: str, instructions: str, input_text: str) -> dict[str, Any]:
-        """Return one JSON object generated from the supplied bounded input."""
-
-
-class OpenAIResponsesClient:
-    """Minimal SDK-free client for the OpenAI Responses API."""
-
-    endpoint = "https://api.openai.com/v1/responses"
-
-    def __init__(self, api_key: str | None = None) -> None:
-        self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
-
-    def generate_json(self, *, model: str, instructions: str, input_text: str) -> dict[str, Any]:
-        if not self.api_key:
-            raise RuntimeError(
-                "OPENAI_API_KEY is required to run the real research-work stage."
-            )
-
-        schema = {
+def research_report_schema() -> dict[str, Any]:
+    return {
             "type": "object",
             "additionalProperties": False,
             "required": [
@@ -86,49 +63,6 @@ class OpenAIResponsesClient:
                 "unknowns": {"type": "array", "items": {"type": "string"}},
             },
         }
-        payload = {
-            "model": model,
-            "input": [
-                {
-                    "role": "developer",
-                    "content": [{"type": "input_text", "text": instructions}],
-                },
-                {
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": input_text}],
-                },
-            ],
-            "text": {
-                "format": {
-                    "type": "json_schema",
-                    "name": "research_work_report",
-                    "strict": True,
-                    "schema": schema,
-                }
-            },
-        }
-        request = urllib.request.Request(
-            self.endpoint,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"OpenAI API request failed (HTTP {exc.code}).") from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError("OpenAI API request could not be completed.") from exc
-
-        output_text = _response_output_text(payload)
-        try:
-            return json.loads(output_text)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError("Model response was not valid JSON.") from exc
 
 
 @dataclass(frozen=True)
@@ -180,6 +114,8 @@ class ResearchWorkExecutor:
             model=self.settings.model,
             instructions=research_instructions(),
             input_text=render_model_input(subject, evidence),
+            schema_name="research_work_report",
+            schema=research_report_schema(),
         )
         validate_report(report, evidence)
         artifact_path.write_text(render_research_report(subject, evidence, report), encoding="utf-8")
@@ -433,11 +369,3 @@ def _claim_lines(claims: list[dict[str, Any]]) -> list[str]:
 
 def _bullet_strings(values: list[str]) -> list[str]:
     return [f"- {value}" for value in values] or ["- None identified from the inspected evidence."]
-
-
-def _response_output_text(payload: dict[str, Any]) -> str:
-    for output in payload.get("output", []):
-        for content in output.get("content", []):
-            if content.get("type") == "output_text":
-                return content["text"]
-    raise RuntimeError("OpenAI API response did not contain output text.")

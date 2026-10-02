@@ -6,11 +6,12 @@ This repository starts rebuilding the Phase 1 Content Agent outside Codex. Phase
 
 ## Current Status
 
-Step 2 begins with a real, LLM-powered `research-work` stage. The remaining
-stages are still placeholders.
+Phase 2 now has real, LLM-powered `research-work`, `research-resources`, and
+`build-evidence-context` stages. The writing and review stages are still
+placeholders.
 
-The runtime lifecycle was validated first with placeholder stages. It now has one
-real stage while the remaining stages still use placeholders:
+The runtime lifecycle was validated first with placeholder stages. It now has
+three real stages while the remaining stages still use placeholders:
 
 - run creation
 - run directories
@@ -25,6 +26,15 @@ real stage while the remaining stages still use placeholders:
 repository, asks a raw OpenAI API call to interpret only that bundle, validates
 the structured response, and writes `research-report.md`. It blocks before the
 model call when no matching evidence is available.
+
+`research-resources` reads only local paths or URLs explicitly provided with
+`--resource`. It writes `resources-report.md`, skips cleanly when no resources
+are supplied, and blocks if supplied resources cannot be inspected.
+
+`build-evidence-context` reads the two research artifacts from the same run,
+selects only the strongest traceable claims, and writes `context-brief.md`. It
+keeps unknowns, unsupported claims, and missing-resource limitations visible to
+the later writing stages.
 
 ## Workflow
 
@@ -49,7 +59,9 @@ run state or artifacts.
 
 ```bash
 python -m personal_ai_agent run "What I learned building tool calling" \
-  --repository "/path/to/the/project-you-want-to-research"
+  --repository "/path/to/the/project-you-want-to-research" \
+  --resource "/path/to/notes/tool-calling.md" \
+  --resource "https://platform.openai.com/docs/..."
 ```
 
 Resume an incomplete run:
@@ -72,8 +84,9 @@ python -m personal_ai_agent --runs-dir /tmp/personal-agent-runs run "My subject"
 ```
 
 Pass `--model <name>` to select a model for a new run. The repository and model
-are persisted as non-secret run inputs so `resume` can recreate the stage
-configuration.
+are persisted with the explicit resource list as non-secret run inputs so
+`resume` can recreate the stage configuration. Repeat `--resource` to override
+the saved resource list during resume.
 
 ## Tests
 

@@ -28,8 +28,9 @@ Agent = Runtime + Model + Tools + Instructions + State
 
 The runtime coordinates execution and persistence. The model provides reasoning and language generation. Tools provide external actions. Instructions define behavior. State records what has happened.
 
-Step 1 implemented the runtime skeleton. Step 2 begins replacing one placeholder
-with a real capability, starting with grounded repository research.
+Step 1 implemented the runtime skeleton. Phase 2 now has three real
+capabilities: grounded repository research, grounded supplied-resource research,
+and evidence-context construction.
 
 ## Runtime Shape
 
@@ -100,6 +101,44 @@ evidence identifier before it persists the Markdown report.
 This does not prove every claim is true: the model can still misinterpret an
 excerpt. It does make the claim inspectable and prevents the model from citing
 invented source identifiers.
+
+## Supplied Resource Research
+
+`research-resources` follows the same boundary for external knowledge:
+
+```text
+explicit local path or URL -> bounded resource text -> model interpretation -> validated report
+```
+
+V1 does not discover web sources by itself. It reads only `--resource` values
+the user supplied. No supplied resources produces a `skipped` report, while
+supplied resources that all fail to load produce `blocked`. This keeps a missing
+optional enrichment step distinct from a failure to honor an explicit source.
+
+The report uses resource IDs such as `R1`. Source facts and interpretations must
+cite those IDs; the runtime rejects invented resource references before writing
+`resources-report.md`.
+
+## Evidence Context
+
+`build-evidence-context` is the boundary between research and generation:
+
+```text
+research-report.md + resources-report.md
+  -> selected claim packet
+  -> model synthesis with reference IDs
+  -> validated context-brief.md
+```
+
+It does not rerun repository or resource research. It reads the artifacts already
+produced by those stages, keeps their `E…` and `R…` references, and asks the
+model to reduce rather than expand the material. A context claim about the user's
+work must cite work evidence; a work-resource connection must cite both types.
+
+This is context engineering in practice: a later writer receives fewer, clearer,
+grounded claims instead of two raw reports and an invitation to reconstruct the
+story. If work research is missing, the stage blocks. Missing optional resource
+research produces a work-only brief with that limitation recorded.
 
 ## Resumability
 
