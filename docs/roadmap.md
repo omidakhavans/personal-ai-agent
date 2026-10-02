@@ -132,11 +132,33 @@ write-blog executor
 
 Do not implement this until explicitly requested.
 
+## Step 5: Runtime Hardening
+
+Status: Complete.
+
+Implemented:
+
+- Atomic `state.json` checkpoints, state validation, and a migration path for
+  earlier local run state.
+- Strict generated run IDs, run-directory confinement, and clear errors for
+  missing or corrupt state.
+- A per-run POSIX lock and explicit stage attempt counts for interrupted work.
+- Validation that completed, skipped, and blocked stages created their expected
+  non-empty artifact inside the run directory.
+- Shareable run state/artifacts that use safe labels instead of absolute local
+  paths; private resume locations live in ignored owner-only local config.
+- Best-effort credential redaction before collected source text reaches a model.
+- Public-HTTPS-only resource fetching with private-network and redirect checks.
+- Bounded model output plus bounded retry behavior for transient API failures.
+
+The next functional capability remains grounded `write-blog`. It should consume
+only `context-brief.md`, preserve its citations and unknowns, and remain a draft
+for human review. The runtime foundations are now strong enough to add that
+generation capability without duplicating safety policy in every later stage.
+
 ## Later Ideas
 
 - Add a simple workflow configuration file.
-- Add real resource research.
-- Add context-building logic.
 - Add grounded blog generation.
 - Add evidence-aware review.
 - Add social transformation.

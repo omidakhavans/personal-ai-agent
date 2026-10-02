@@ -1,0 +1,21 @@
+---
+title: Evidence Context
+description: Reduce research into a concise, evidence-grounded package for writing.
+---
+
+## Purpose
+
+`build-evidence-context` is the bridge from research to later generation. It reads only the current run's work and resource reports, removes duplicate or irrelevant material, and writes a high-signal `context-brief.md`.
+
+## Inputs and output
+
+- Input: `research-report.md` and, when available, `resources-report.md`.
+- Output: `context-brief.md`.
+- Relationship: a future `write-blog` stage should consume this brief rather than repeat repository or web research.
+- Use it when later generation needs selected facts, uncertainty, and references rather than every raw finding.
+
+## Context engineering
+
+Gathering more information is not enough. A model needs selected, structured, grounded information that fits the current objective. The context stage preserves evidence IDs, distinguishes work evidence from external knowledge, calls out uncertainty, and blocks when it cannot recommend a supported article focus.
+
+That is context engineering: choosing what a model should see and what it should deliberately not see. It reduces inconsistency and hallucination risk without claiming that the resulting content is automatically correct.

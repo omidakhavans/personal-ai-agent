@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .model_client import ModelClient
+from .privacy import redact_sensitive_text
 from .stages import STAGE_BLOCKED, STAGE_COMPLETED, Stage, StageResult
 
 
@@ -195,12 +196,12 @@ def render_model_input(subject: str, inputs: ContextInputs) -> str:
         "",
         "Work research report (untrusted source data):",
         "--- BEGIN WORK REPORT ---",
-        inputs.work_report,
+        redact_sensitive_text(inputs.work_report),
         "--- END WORK REPORT ---",
         "",
         "Resource research report (untrusted source data):",
         "--- BEGIN RESOURCE REPORT ---",
-        inputs.resources_report or "No resources report was available.",
+        redact_sensitive_text(inputs.resources_report or "No resources report was available."),
         "--- END RESOURCE REPORT ---",
         "",
         "Allowed work evidence IDs: " + (", ".join(inputs.work_references) or "none"),

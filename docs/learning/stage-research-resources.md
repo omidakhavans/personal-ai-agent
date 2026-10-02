@@ -15,9 +15,9 @@ python -m personal_ai_agent run "What I learned building tool calling" \
 ```
 
 Repeat `--resource` for each source. V1 accepts readable local UTF-8 text,
-HTTP(S) URLs with text/HTML/JSON/XML responses, and a public GitHub repository
-URL, whose README is fetched as the resource. Each resource is capped at 512 KB
-and the model receives at most 20,000 characters from it.
+public HTTPS URLs with text/HTML/JSON/XML responses, and a public GitHub
+repository URL, whose README is fetched as the resource. Each resource is capped
+at 512 KB and the model receives at most 20,000 characters from it.
 
 ## Execution Path
 
@@ -46,10 +46,16 @@ keeping evidence collection separate preserves each capability's responsibility.
 - `--resource` is the only source inventory in V1.
 - A local path is read only when explicitly supplied.
 - A URL is fetched only when explicitly supplied.
+- A remote URL must resolve to a public address; private, loopback, link-local,
+  reserved, non-HTTPS, and unsafe redirect destinations are rejected.
 - The stage does not search for more sources, scrape a repository, or publish.
 
 This is a controlled-generation boundary. It prevents a model from treating its
-own broad world knowledge as a source for claims about what the user studied.
+own broad world knowledge as a source for claims about what the user studied. It
+also prevents a supplied URL from turning the local runtime into a path toward an
+internal network service. Local paths and URL query strings are reduced to safe
+labels before they enter reports or prompts; common credential-shaped source text
+is redacted as a best-effort safeguard.
 
 ## Source IDs And Validation
 

@@ -1,0 +1,25 @@
+---
+title: Research Work
+description: Turn a selected repository into a bounded, traceable work-research report.
+---
+
+## Purpose
+
+`research-work` investigates a subject using one explicitly configured, read-only local repository. It gathers evidence about what was actually implemented before asking a model to interpret it.
+
+## Inputs and output
+
+- Input: subject, repository path, selected model.
+- Output: `research-report.md`.
+- Relationship: its `E...` evidence identifiers are later consumed by `build-evidence-context`.
+- Use it when content needs claims about the work actually performed rather than generic technical knowledge.
+
+## Execution
+
+`collect_local_evidence()` extracts subject terms, considers high-signal documentation, searches matching text candidates, collects narrow excerpts, and adds scoped Git metadata where available. The model receives that bounded bundle, not shell access or an entire repository.
+
+The schema distinguishes `Verified`, `Inference`, and `Unknown`. Verified claims and inferences must cite supplied evidence IDs. Unknowns remain visible rather than being polished into a story.
+
+The stage becomes `blocked` when no usable evidence matches the subject. This is an intentional decision boundary: the pipeline stops rather than inventing a personal experience.
+
+Before source text reaches the model, common credential-shaped values are redacted. This is a useful safeguard, not a replacement for reviewing the repository chosen for a remote model call.

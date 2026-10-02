@@ -1,0 +1,28 @@
+---
+title: Runtime Walkthrough
+description: Trace one CLI run from command input to persisted artifacts.
+---
+
+## Entry point
+
+`python -m personal_ai_agent` executes `personal_ai_agent/__main__.py`, which calls `main()` in `personal_ai_agent/cli.py`.
+
+The CLI parses `run`, `resume`, and `show-state`. It constructs a routed stage executor and passes only safe labels into shareable run state. Actual local locations required for a later resume are kept separately in ignored local configuration.
+
+## Run creation
+
+`Orchestrator.start()` in `personal_ai_agent/runtime.py` creates a timestamped run ID, creates a run directory, builds initial state, stores private resume configuration when provided, and calls `_advance()`.
+
+`state.py` validates run IDs, writes JSON atomically, and obtains a per-run file lock. These are ordinary reliability techniques, but they are crucial when a later stage may call a remote model.
+
+## Stage execution
+
+`_advance()` walks `WORKFLOW_STAGES` in order. It checkpoints `running`, increments the attempt count, calls the selected executor, validates the returned status and artifact, then checkpoints the terminal state.
+
+The result is either a later stage, a completed run, a blocked run, or a failed run. The orchestrator does not need to understand the internal subject matter of each stage.
+
+## Resume
+
+`Orchestrator.resume()` reads and validates state. Completed and skipped stages are not rerun. A previously interrupted `running` stage is reset to `pending` and executed as a new attempt. Existing completed artifacts are checked before advancing so a stale state file cannot silently skip missing work.
+
+This separation is a key agent-system concept: the runtime preserves reliable workflow mechanics while individual stages carry model prompts, tools, and capability-specific decisions.

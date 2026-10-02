@@ -1,0 +1,23 @@
+---
+title: Research Resources
+description: Interpret explicitly supplied resources without letting the model discover sources on its own.
+---
+
+## Purpose
+
+`research-resources` turns local notes and selected public documentation into a traceable resource report.
+
+## Inputs and output
+
+- Input: subject, repeated `--resource` values, selected model.
+- Output: `resources-report.md`.
+- Relationship: its `R...` resource identifiers enrich the evidence-context stage.
+- Use it when a writing topic needs knowledge from sources the author explicitly selected.
+
+## Source boundary
+
+The stage reads only supplied UTF-8 local files or public HTTPS URLs. It does not search the web. URLs must resolve to public addresses and are rechecked after redirects. Resources have byte and character limits, and HTML scripts/styles are excluded from extracted text.
+
+No supplied resources is a valid `skipped` result; later context can still be based on work evidence. If resources were supplied but none can be read, the stage returns `blocked` rather than replacing the requested sources with guesses.
+
+The model receives source identifiers and produces `Source fact`, `Interpretation`, or `Unknown` claims. Facts and interpretations must cite resource IDs. Local paths and URL query strings are reduced to safe labels before reaching reports or prompts.

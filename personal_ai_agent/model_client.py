@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from typing import Any, Protocol
@@ -29,8 +30,18 @@ class OpenAIResponsesClient:
 
     endpoint = "https://api.openai.com/v1/responses"
 
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        *,
+        timeout_seconds: int = 60,
+        max_output_tokens: int = 1_600,
+        max_attempts: int = 3,
+    ) -> None:
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
+        self.timeout_seconds = timeout_seconds
+        self.max_output_tokens = max_output_tokens
+        self.max_attempts = max_attempts
 
     def generate_json(
         self,
@@ -43,9 +54,12 @@ class OpenAIResponsesClient:
     ) -> dict[str, Any]:
         if not self.api_key:
             raise RuntimeError("OPENAI_API_KEY is required to run a real model stage.")
+        if self.timeout_seconds <= 0 or self.max_output_tokens <= 0 or self.max_attempts <= 0:
+            raise RuntimeError("Model client limits must be positive.")
 
         payload = {
             "model": model,
+            "max_output_tokens": self.max_output_tokens,
             "input": [
                 {
                     "role": "developer",
@@ -74,19 +88,29 @@ class OpenAIResponsesClient:
             },
             method="POST",
         )
-        try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                response_payload = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"OpenAI API request failed (HTTP {exc.code}).") from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError("OpenAI API request could not be completed.") from exc
+        response_payload = self._send_with_retries(request)
 
         output_text = _response_output_text(response_payload)
         try:
             return json.loads(output_text)
         except json.JSONDecodeError as exc:
             raise RuntimeError("Model response was not valid JSON.") from exc
+
+    def _send_with_retries(self, request: urllib.request.Request) -> dict[str, Any]:
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                    return json.loads(response.read().decode("utf-8"))
+            except urllib.error.HTTPError as exc:
+                retryable = exc.code == 429 or 500 <= exc.code < 600
+                if not retryable or attempt == self.max_attempts:
+                    raise RuntimeError(f"OpenAI API request failed (HTTP {exc.code}).") from exc
+            except urllib.error.URLError as exc:
+                # A timeout or connection drop can happen after the provider
+                # accepted the request, so automatic retry could duplicate paid work.
+                raise RuntimeError("OpenAI API request could not be completed.") from exc
+            time.sleep(0.5 * attempt)
+        raise RuntimeError("OpenAI API request could not be completed.")  # pragma: no cover
 
 
 def _response_output_text(payload: dict[str, Any]) -> str:

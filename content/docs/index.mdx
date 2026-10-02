@@ -1,0 +1,34 @@
+---
+title: Personal AI Agent
+description: A learning-oriented, grounded AI workflow runtime.
+---
+
+This site explains the Phase 2 implementation of the Personal Applied AI Engineering project.
+
+The repository is a small Python runtime that makes the mechanics behind an AI workflow visible:
+
+- a command-line entry point;
+- persistent run state and Markdown artifacts;
+- grounded repository and resource research;
+- evidence reduction before later generation;
+- explicit `completed`, `blocked`, and `failed` outcomes;
+- human review before publishing.
+
+The current real stages are:
+
+```text
+research-work -> research-resources -> build-evidence-context
+```
+
+Writing, review, and social stages remain placeholders. That is intentional: the learning focus is currently on grounding, context engineering, and runtime reliability rather than producing content automatically.
+
+## Read in order
+
+1. [Getting Started](./getting-started)
+2. [Architecture](./architecture)
+3. [Workflow and State](./workflow)
+4. [Learning Guides](./learning)
+
+## Public documentation boundary
+
+This site intentionally contains no local machine paths, run artifacts, source repositories, credentials, or generated research output. Examples use placeholders. The runtime itself keeps local resume locations outside shareable state and artifacts.

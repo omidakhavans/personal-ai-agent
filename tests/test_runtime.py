@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import copy
+import json
+import os
 import unittest
 from tempfile import TemporaryDirectory
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from personal_ai_agent.evidence_context import (
     EvidenceContextExecutor,
@@ -13,7 +17,9 @@ from personal_ai_agent.evidence_context import (
 )
 from personal_ai_agent.research_resources import (
     ResearchResourcesSettings,
+    ResourceReadError,
     ResourceResearchExecutor,
+    _read_resource,
     collect_resources,
 )
 from personal_ai_agent.research_work import (
@@ -21,6 +27,7 @@ from personal_ai_agent.research_work import (
     ResearchWorkSettings,
     collect_local_evidence,
 )
+from personal_ai_agent.model_client import OpenAIResponsesClient
 from personal_ai_agent.runtime import Orchestrator
 from personal_ai_agent.stages import (
     STAGE_BLOCKED,
@@ -39,8 +46,13 @@ from personal_ai_agent.state import (
     RUN_COMPLETED,
     RUN_FAILED,
     RUN_RUNNING,
+    StateError,
     paths_for_run,
+    private_config_path,
+    initial_state,
     read_state,
+    read_private_config,
+    write_private_config,
     write_state,
 )
 
@@ -97,6 +109,7 @@ class RuntimeTests(unittest.TestCase):
                     "research-work": StageResult(
                         status=STAGE_BLOCKED,
                         message="Insufficient verified work evidence.",
+                        artifact="research-report.md",
                     )
                 }
             )
@@ -136,6 +149,7 @@ class RuntimeTests(unittest.TestCase):
                     "build-evidence-context": StageResult(
                         status=STAGE_BLOCKED,
                         message="No credible article angle.",
+                        artifact="context-brief.md",
                     )
                 }
             )
@@ -157,6 +171,80 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(resume_executor.calls[0], "build-evidence-context")
             self.assertNotIn("research-work", resume_executor.calls)
             self.assertNotIn("research-resources", resume_executor.calls)
+
+    def test_success_without_the_expected_artifact_fails_the_run(self) -> None:
+        with TemporaryDirectory() as tmp:
+            state = Orchestrator(
+                runs_dir=Path(tmp) / "runs",
+                executor=MappingStageExecutor(
+                    {"research-work": StageResult(status=STAGE_COMPLETED, message="Missing artifact.")}
+                ),
+            ).start("Artifact contract")
+
+            self.assertEqual(state["status"], RUN_FAILED)
+            self.assertIn("expected artifact", state["stages"]["research-work"]["message"])
+
+    def test_invalid_run_id_is_rejected_before_path_construction(self) -> None:
+        with TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(StateError, "invalid"):
+                paths_for_run(Path(tmp) / "runs", "../outside")
+
+    def test_corrupt_state_returns_a_clear_error(self) -> None:
+        with TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "state.json"
+            state_path.write_text("{not-json", encoding="utf-8")
+
+            with self.assertRaisesRegex(StateError, "corrupt"):
+                read_state(state_path)
+
+    def test_pre_hardening_state_is_migrated_when_read(self) -> None:
+        with TemporaryDirectory() as tmp:
+            old_state = initial_state("20261002-105024-1234abcd", "Old run")
+            old_state.pop("state_version")
+            for stage in old_state["stages"].values():
+                stage.pop("attempts")
+            state_path = Path(tmp) / "state.json"
+            state_path.write_text(json.dumps(old_state), encoding="utf-8")
+
+            migrated = read_state(state_path)
+
+            self.assertEqual(migrated["state_version"], 2)
+            self.assertTrue(all(stage["attempts"] == 0 for stage in migrated["stages"].values()))
+
+    def test_private_resume_configuration_is_not_part_of_run_state(self) -> None:
+        with TemporaryDirectory() as tmp:
+            runs_dir = Path(tmp) / "runs"
+            config = {
+                "repository": "local-machine/project",
+                "resources": ["local-machine/note.md"],
+                "model": "test-model",
+            }
+            state = Orchestrator(runs_dir=runs_dir).start(
+                "Private configuration",
+                inputs={"repository": "local repository: project", "resources": ["local file: note.md"]},
+                private_inputs=config,
+            )
+            persisted = read_state(paths_for_run(runs_dir, state["run_id"]).state_path)
+            config_path = private_config_path(runs_dir, state["run_id"])
+
+            self.assertNotIn("local-machine", json.dumps(persisted))
+            self.assertEqual(read_private_config(runs_dir, state["run_id"]), config)
+            self.assertEqual(os.stat(config_path).st_mode & 0o777, 0o600)
+
+    def test_interrupted_stage_records_a_new_attempt_when_resumed(self) -> None:
+        with TemporaryDirectory() as tmp:
+            runs_dir = Path(tmp) / "runs"
+            first = Orchestrator(runs_dir=runs_dir).start("Attempt tracking")
+            paths = paths_for_run(runs_dir, first["run_id"])
+            state = read_state(paths.state_path)
+            state["status"] = RUN_RUNNING
+            state["current_stage"] = "write-blog"
+            state["stages"]["write-blog"]["status"] = STAGE_RUNNING
+            write_state(paths.state_path, state)
+
+            resumed = Orchestrator(runs_dir=runs_dir).resume(first["run_id"])
+
+            self.assertEqual(resumed["stages"]["write-blog"]["attempts"], 2)
 
 
 class FakeModelClient:
@@ -185,7 +273,9 @@ def valid_research_report() -> dict[str, Any]:
         "technical_decisions": [],
         "problems_encountered": [],
         "solutions_or_approaches": [],
-        "technologies_and_concepts": ["tool calling"],
+        "technologies_and_concepts": [
+            {"status": "Verified", "claim": "The repository uses tool calling.", "evidence_ids": ["E1"]}
+        ],
         "potential_lessons": [],
         "unknowns": ["Motivation is not established by the inspected evidence."],
     }
@@ -304,6 +394,19 @@ class ResearchWorkTests(unittest.TestCase):
             self.assertEqual(state["stages"]["research-work"]["status"], STAGE_BLOCKED)
             self.assertEqual(model.calls, [])
 
+    def test_redacts_common_credentials_before_the_model_receives_evidence(self) -> None:
+        with TemporaryDirectory() as tmp:
+            repository = Path(tmp)
+            (repository / "README.md").write_text(
+                f"Tool calling uses api_key={'sk-' + 'thisisnotarealkeyvalue123456'}\n",
+                encoding="utf-8",
+            )
+
+            evidence = collect_local_evidence("Tool calling", repository)
+
+            self.assertIn("[REDACTED]", evidence.items[0].content)
+            self.assertNotIn("sk-" + "thisisnotarealkeyvalue123456", evidence.items[0].content)
+
 
 class ResearchResourcesTests(unittest.TestCase):
     def test_collects_explicit_local_resource(self) -> None:
@@ -396,6 +499,22 @@ class ResearchResourcesTests(unittest.TestCase):
             self.assertEqual(resource_model.calls, [])
             self.assertIn("could not be inspected", (run_dir / "resources-report.md").read_text(encoding="utf-8"))
 
+    def test_rejects_insecure_and_private_network_urls_before_fetching(self) -> None:
+        with self.assertRaisesRegex(ResourceReadError, "HTTPS"):
+            _read_resource("http://example.com/reference")
+        with self.assertRaisesRegex(ResourceReadError, "could not be fetched"):
+            _read_resource("https://127.0.0.1/reference")
+
+    def test_local_resource_reference_is_safe_to_render(self) -> None:
+        with TemporaryDirectory() as tmp:
+            resource_path = Path(tmp) / "private-note.md"
+            resource_path.write_text("Tool calling note", encoding="utf-8")
+
+            bundle = collect_resources((str(resource_path),))
+
+            self.assertEqual(bundle.resources[0].reference, "local file: private-note.md")
+            self.assertNotIn(str(Path(tmp)), bundle.resources[0].reference)
+
 
 class EvidenceContextTests(unittest.TestCase):
     def test_context_stage_writes_traceable_brief(self) -> None:
@@ -473,6 +592,35 @@ class EvidenceContextTests(unittest.TestCase):
 
             with self.assertRaisesRegex(RuntimeError, "unknown work evidence IDs"):
                 validate_context_brief(brief, collect_context_inputs(run_dir))
+
+
+class ModelClientTests(unittest.TestCase):
+    def test_requests_bounded_structured_output(self) -> None:
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return b'{"output": [{"content": [{"type": "output_text", "text": "{}"}]}]}'
+
+        client = OpenAIResponsesClient("test-key", max_output_tokens=321)
+        with patch("personal_ai_agent.model_client.urllib.request.urlopen", return_value=Response()) as mocked_open:
+            self.assertEqual(
+                client.generate_json(
+                    model="test-model",
+                    instructions="Return JSON.",
+                    input_text="bounded input",
+                    schema_name="test_schema",
+                    schema={"type": "object", "additionalProperties": False, "properties": {}},
+                ),
+                {},
+            )
+
+        payload = json.loads(mocked_open.call_args.args[0].data.decode("utf-8"))
+        self.assertEqual(payload["max_output_tokens"], 321)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,41 @@
+---
+title: Architecture
+description: The runtime, model, tools, instructions, and state made explicit.
+---
+
+Phase 1 used Codex as the runtime. Phase 2 makes the parts Codex handled implicitly visible in application code.
+
+```text
+Agent = runtime + model + tools + instructions + state
+```
+
+The runtime coordinates stage order and persistence. The model interprets bounded inputs. Tools collect local evidence and explicitly supplied resources. Instructions define each stage's behavior. State records exactly what happened.
+
+## Runtime shape
+
+```text
+CLI -> Orchestrator -> state.json -> stage executor -> Markdown artifacts
+```
+
+The orchestrator owns deterministic rules, such as `review-blog` happening after `write-blog`. Stage executors own capability-specific logic, such as deciding that insufficient evidence should block a run.
+
+## Grounding boundary
+
+The model does not receive unrestricted filesystem or network access.
+
+```text
+repository or supplied resource
+  -> bounded collector
+  -> source identifiers
+  -> model interpretation
+  -> schema validation
+  -> Markdown artifact
+```
+
+This does not prove that every model interpretation is correct. It makes important claims traceable and gives a human reviewer a clear evidence trail.
+
+## Safety boundary
+
+Shareable `state.json` and Markdown artifacts use safe labels rather than absolute local paths. Local paths necessary for resume are stored separately in ignored, owner-only local configuration. Source text receives best-effort credential redaction before it reaches the model.
+
+Remote resource fetching accepts only explicitly supplied public HTTPS URLs, rejects private and reserved network addresses, and checks redirect destinations. This prevents a future model or document from turning the runtime into a way to read an internal service.

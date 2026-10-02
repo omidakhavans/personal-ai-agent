@@ -21,6 +21,8 @@ three real stages while the remaining stages still use placeholders:
 - failed vs blocked outcomes
 - resume behavior
 - skipping completed stages during resume
+- atomic state checkpoints and a local per-run lock
+- verified stage artifacts and recorded execution attempts
 
 `research-work` now gathers a narrow local evidence bundle from a configured
 repository, asks a raw OpenAI API call to interpret only that bundle, validates
@@ -30,6 +32,27 @@ model call when no matching evidence is available.
 `research-resources` reads only local paths or URLs explicitly provided with
 `--resource`. It writes `resources-report.md`, skips cleanly when no resources
 are supplied, and blocks if supplied resources cannot be inspected.
+
+## Safety And Resume Boundaries
+
+Run artifacts and `state.json` use shareable labels such as `local file:
+notes.md`; they do not contain absolute local repository or resource paths.
+The machine-local locations needed by `resume` are stored separately under the
+git-ignored `runs/.runtime-config/` directory with owner-only permissions. Do
+not share that directory.
+
+Before source text is sent to the model, the runtime applies a small best-effort
+credential redactor. It also limits remote resources to explicitly supplied
+public HTTPS URLs, rejects private or reserved network addresses, revalidates
+redirects, and limits response size. These guardrails reduce accidental data
+exposure; they are not a substitute for reviewing the repositories and sources
+you choose to send to a remote model.
+
+State writes are atomic and a per-run lock prevents two local processes from
+advancing one run at the same time. Every non-failed stage must leave its
+expected non-empty artifact in the run directory before the runtime records it
+as successful. Resuming an interrupted stage creates a new recorded attempt,
+which can result in another model call and should be intentional.
 
 `build-evidence-context` reads the two research artifacts from the same run,
 selects only the strongest traceable claims, and writes `context-brief.md`. It
@@ -84,9 +107,10 @@ python -m personal_ai_agent --runs-dir /tmp/personal-agent-runs run "My subject"
 ```
 
 Pass `--model <name>` to select a model for a new run. The repository and model
-are persisted with the explicit resource list as non-secret run inputs so
-`resume` can recreate the stage configuration. Repeat `--resource` to override
-the saved resource list during resume.
+are represented with safe labels in run state. Their actual local locations are
+kept only in the git-ignored local resume configuration so `resume` can recreate
+the stage configuration. Repeat `--resource` to override the saved resource
+list during resume.
 
 ## Tests
 
@@ -101,6 +125,14 @@ python -m unittest discover -s tests
 Start with [Phase 2 Learning Path](docs/learning/README.md). It links the
 end-to-end build guide, runtime walkthrough, and one focused explanation for
 each implemented stage.
+
+## Documentation Site
+
+The reviewed learning guides are also available as a static Fumadocs site. Run
+`npm ci && npm run dev` to read them locally, or `npm run build` to produce the
+GitHub Pages export in `out/`. The Pages workflow is in
+`.github/workflows/deploy-docs.yml`; it publishes only after GitHub Pages is
+configured to use GitHub Actions.
 
 ## Relationship To Phase 1
 

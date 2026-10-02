@@ -9,10 +9,11 @@ from typing import Sequence
 
 from .evidence_context import EvidenceContextExecutor, EvidenceContextSettings
 from .model_client import OpenAIResponsesClient
+from .privacy import reference_label, repository_label
 from .research_resources import ResearchResourcesSettings, ResourceResearchExecutor
 from .research_work import ResearchWorkExecutor, ResearchWorkSettings
 from .runtime import Orchestrator, RuntimeErrorWithContext
-from .state import paths_for_run, read_state
+from .state import StateError, paths_for_run, read_private_config, read_state
 from .stages import RoutedStageExecutor
 
 
@@ -78,6 +79,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             state = Orchestrator(runs_dir=runs_dir, executor=executor).start(
                 args.subject,
                 inputs={
+                    "repository": repository_label(Path(args.repository).expanduser().resolve()),
+                    "resources": [reference_label(resource) for resource in args.resource],
+                    "model": args.model,
+                },
+                private_inputs={
                     "repository": str(Path(args.repository).expanduser().resolve()),
                     "resources": args.resource,
                     "model": args.model,
@@ -87,10 +93,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
 
         if args.command == "resume":
-            previous = read_state(paths_for_run(runs_dir, args.run_id).state_path)
-            repository = args.repository or previous.get("inputs", {}).get("repository")
-            model = args.model or previous.get("inputs", {}).get("model")
-            resources = tuple(args.resource) if args.resource is not None else tuple(previous.get("inputs", {}).get("resources", []))
+            read_state(paths_for_run(runs_dir, args.run_id).state_path)
+            try:
+                private_config = read_private_config(runs_dir, args.run_id)
+            except StateError:
+                if not args.repository or not args.model:
+                    raise
+                private_config = {
+                    "repository": args.repository,
+                    "resources": args.resource or [],
+                    "model": args.model,
+                }
+            repository = args.repository or private_config.get("repository")
+            model = args.model or private_config.get("model")
+            resources = tuple(args.resource) if args.resource is not None else tuple(private_config.get("resources", []))
             if not repository or not model:
                 raise RuntimeErrorWithContext(
                     "This run has no saved research configuration. Pass --repository and --model."
@@ -106,7 +122,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             paths = paths_for_run(runs_dir, args.run_id)
             print(json.dumps(read_state(paths.state_path), indent=2, sort_keys=True))
             return 0
-    except RuntimeErrorWithContext as exc:
+    except (RuntimeErrorWithContext, StateError) as exc:
         parser.error(str(exc))
 
     parser.error(f"Unknown command: {args.command}")
@@ -115,11 +131,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def print_run_result(state: dict, runs_dir: Path) -> None:
     run_id = state["run_id"]
-    paths = paths_for_run(runs_dir, run_id)
     print(f"run_id: {run_id}")
     print(f"status: {state['status']}")
-    print(f"state: {paths.state_path}")
-    print(f"artifacts: {paths.run_dir}")
+    print("state artifact: state.json")
+    print("artifact directory: this run's directory under the configured runs directory")
 
 
 def build_content_executor(

@@ -15,6 +15,9 @@ this repository. Read it in this order.
    - Learn how explicitly supplied local files and URLs become source-backed knowledge.
 5. [Evidence Context Stage](stage-build-evidence-context.md)
    - Learn how the runtime reduces research into a compact writer-ready brief.
+6. [Runtime Hardening](runtime-hardening.md)
+   - Learn why safety, artifact verification, durable state, and retries belong
+     in the runtime rather than in individual AI prompts.
 
 The recommended way to learn is to read one guide, open the named files beside
 it, then run the focused tests. Change one small behavior only after you can

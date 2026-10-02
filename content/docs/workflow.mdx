@@ -1,0 +1,38 @@
+---
+title: Workflow and State
+description: How a run advances, stops safely, and resumes.
+---
+
+## Current workflow
+
+```text
+subject
+  -> research-work
+  -> research-resources
+  -> build-evidence-context
+  -> write-blog
+  -> review-blog
+  -> write-linkedin
+  -> write-x
+```
+
+Only the first three stages are real today. The rest write placeholder artifacts so the runtime lifecycle can be learned and tested before each capability is implemented.
+
+## State transitions
+
+Each stage begins as `pending`, becomes `running`, then finishes as one of:
+
+- `completed`: expected artifact exists and passed the stage contract.
+- `skipped`: optional work was intentionally absent, such as no supplied resources.
+- `blocked`: execution was valid but there is not enough trustworthy input to continue.
+- `failed`: a technical or contract error occurred.
+
+`blocked` is not a retry signal. It asks for better evidence or human judgment. `failed` asks for technical investigation.
+
+## Durable checkpoints
+
+The runtime writes state through a temporary file and atomic replacement. It validates state when reading it, records stage attempt counts, and locks each run so two local processes cannot advance it simultaneously.
+
+Before it records a non-failed result, the orchestrator verifies that the stage wrote its expected non-empty artifact inside the run directory. On resume it verifies earlier artifacts again. State alone is not enough proof that a later stage has its required input.
+
+An interrupted `running` stage is retried only through an explicit `resume`. A new attempt can produce a different model output and another paid request, so this fact stays visible in state.

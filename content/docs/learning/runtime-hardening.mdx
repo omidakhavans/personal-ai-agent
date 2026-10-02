@@ -1,0 +1,30 @@
+---
+title: Runtime Hardening
+description: Why safety, durability, and artifact validation belong in the runtime.
+---
+
+The first review of the prototype found that correctness alone was not enough. A reliable agent runtime must also protect inputs, make checkpoints durable, and verify the artifacts that later model stages trust.
+
+## Public artifacts and private resume data
+
+`state.json` is an audit artifact, so it stores safe labels. Local paths required for resume live in ignored owner-only configuration. This prevents a convenient state file from becoming a record of a developer's machine.
+
+## Resource safety
+
+The public-web fetcher rejects non-HTTPS URLs, internal addresses, and unsafe redirects. Without that check, a supplied URL could make the runtime read an internal service and place its response in a model prompt.
+
+## Durable state and artifacts
+
+State writes are atomic. State has a version and validation. A run lock prevents concurrent advancement. Every completed, skipped, or blocked stage must write its expected non-empty artifact inside its run directory, and resume verifies that contract again.
+
+## Bounded model calls
+
+The raw API client has a timeout, output-token cap, and conservative retry handling. A connection failure is not retried automatically because the provider may have accepted the request before the client lost contact. This is an important AI-specific trade-off: retries can duplicate non-deterministic, paid work.
+
+## Exercises
+
+1. Add another credential-shaped pattern and a regression test.
+2. Add a test for an artifact symlink escaping a run directory.
+3. Add a command-line switch that disables remote-resource fetching.
+4. Replace the retry delay with bounded exponential backoff.
+5. Implement a human approval checkpoint before a future publishing stage.

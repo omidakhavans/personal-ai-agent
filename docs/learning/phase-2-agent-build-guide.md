@@ -126,7 +126,8 @@ subject + read-only repository
 
 The application, not the model, chooses the repository files and scoped Git
 metadata to inspect. The model gets excerpts, not a shell or unrestricted file
-access. Claims marked `Verified` must cite an evidence ID such as `E1`.
+access. Claims marked `Verified` or `Inference` must cite an evidence ID such
+as `E1`.
 
 Read [Research Work Stage](stage-research-work.md) next for the collector,
 prompt, validation, and blocked behavior.

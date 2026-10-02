@@ -26,7 +26,10 @@ from .state import (
     new_run_id,
     paths_for_run,
     read_state,
+    run_lock,
+    StateError,
     utc_now,
+    write_private_config,
     write_state,
 )
 
@@ -50,32 +53,42 @@ class Orchestrator:
         subject: str,
         *,
         inputs: dict[str, Any] | None = None,
+        private_inputs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         run_id = new_run_id()
         paths = paths_for_run(self.runs_dir, run_id)
         paths.run_dir.mkdir(parents=True, exist_ok=False)
         state = initial_state(run_id=run_id, subject=subject, inputs=inputs)
-        write_state(paths.state_path, state)
-        return self._advance(state=state, state_path=paths.state_path, run_dir=paths.run_dir)
+        try:
+            with run_lock(paths.run_dir):
+                write_state(paths.state_path, state)
+                if private_inputs is not None:
+                    write_private_config(self.runs_dir, run_id, private_inputs)
+                return self._advance(state=state, state_path=paths.state_path, run_dir=paths.run_dir)
+        except StateError as exc:
+            raise RuntimeErrorWithContext(str(exc)) from exc
 
     def resume(self, run_id: str) -> dict[str, Any]:
-        paths = paths_for_run(self.runs_dir, run_id)
-        if not paths.state_path.exists():
-            raise RuntimeErrorWithContext(f"Run not found: {run_id}")
-        state = read_state(paths.state_path)
+        try:
+            paths = paths_for_run(self.runs_dir, run_id)
+            with run_lock(paths.run_dir):
+                state = read_state(paths.state_path)
 
-        if state["status"] in {RUN_COMPLETED, RUN_BLOCKED, RUN_FAILED}:
-            return state
+                if state["status"] in {RUN_COMPLETED, RUN_BLOCKED, RUN_FAILED}:
+                    return state
 
-        self._reset_interrupted_stage(state)
-        return self._advance(state=state, state_path=paths.state_path, run_dir=paths.run_dir)
+                self._verify_prior_artifacts(state, paths.run_dir)
+                self._reset_interrupted_stage(state)
+                return self._advance(state=state, state_path=paths.state_path, run_dir=paths.run_dir)
+        except StateError as exc:
+            raise RuntimeErrorWithContext(str(exc)) from exc
 
     def _reset_interrupted_stage(self, state: dict[str, Any]) -> None:
         for stage in WORKFLOW_STAGES:
             stage_state = state["stages"][stage.name]
             if stage_state["status"] == STAGE_RUNNING:
                 stage_state["status"] = STAGE_PENDING
-                stage_state["message"] = "Reset from interrupted running state."
+                stage_state["message"] = "Interrupted attempt will be retried on explicit resume."
                 stage_state["finished_at"] = None
                 return
 
@@ -112,6 +125,7 @@ class Orchestrator:
 
             state["current_stage"] = stage.name
             stage_state["status"] = STAGE_RUNNING
+            stage_state["attempts"] += 1
             stage_state["started_at"] = utc_now()
             write_state(state_path, state)
 
@@ -137,6 +151,21 @@ class Orchestrator:
                 write_state(state_path, state)
                 return state
 
+            artifact_error = self._validate_stage_artifact(
+                status=result.status,
+                artifact=result.artifact,
+                stage_name=stage.name,
+                expected_artifact=stage.artifact,
+                run_dir=run_dir,
+            )
+            if artifact_error:
+                stage_state["status"] = STAGE_FAILED
+                stage_state["message"] = artifact_error
+                stage_state["finished_at"] = utc_now()
+                state["status"] = RUN_FAILED
+                write_state(state_path, state)
+                return state
+
             stage_state["status"] = result.status
             stage_state["message"] = result.message
             stage_state["finished_at"] = utc_now()
@@ -157,3 +186,37 @@ class Orchestrator:
         state["current_stage"] = None
         write_state(state_path, state)
         return state
+
+    @staticmethod
+    def _validate_stage_artifact(
+        *,
+        status: str,
+        artifact: str | None,
+        stage_name: str,
+        expected_artifact: str,
+        run_dir: Path,
+    ) -> str | None:
+        if status == STAGE_FAILED:
+            return None
+        if artifact != expected_artifact:
+            return f"Stage {stage_name!r} did not return its expected artifact."
+        artifact_path = (run_dir / expected_artifact).resolve()
+        if artifact_path.parent != run_dir.resolve():
+            return f"Stage {stage_name!r} produced an unsafe artifact path."
+        if not artifact_path.is_file() or artifact_path.stat().st_size == 0:
+            return f"Stage {stage_name!r} reported success without a readable artifact."
+        return None
+
+    def _verify_prior_artifacts(self, state: dict[str, Any], run_dir: Path) -> None:
+        for stage in WORKFLOW_STAGES:
+            stage_state = state["stages"][stage.name]
+            if stage_state["status"] in {STAGE_COMPLETED, STAGE_SKIPPED, STAGE_BLOCKED}:
+                error = self._validate_stage_artifact(
+                    status=stage_state["status"],
+                    artifact=stage_state["artifact"],
+                    stage_name=stage.name,
+                    expected_artifact=stage.artifact,
+                    run_dir=run_dir,
+                )
+                if error:
+                    raise RuntimeErrorWithContext(f"Cannot resume: {error}")

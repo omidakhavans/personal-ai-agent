@@ -9,9 +9,11 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from .model_client import ModelClient
+from .privacy import redact_sensitive_text, reference_label
+from .resource_fetch import UnsafeResourceURL, open_public_https
 from .stages import STAGE_BLOCKED, STAGE_COMPLETED, STAGE_SKIPPED, Stage, StageResult
 
 
@@ -95,21 +97,21 @@ def collect_resources(references: tuple[str, ...]) -> ResourceBundle:
         try:
             title, content = _read_resource(reference)
         except ResourceReadError as exc:
-            inaccessible.append(f"{reference}: {exc}")
+            inaccessible.append(f"{reference_label(reference)}: {exc}")
             continue
         if not content.strip():
-            inaccessible.append(f"{reference}: resource contained no readable text")
+            inaccessible.append(f"{reference_label(reference)}: resource contained no readable text")
             continue
         resources.append(
             Resource(
                 identifier=f"R{len(resources) + 1}",
                 title=title,
-                reference=reference,
-                content=content[:MAX_RESOURCE_CHARACTERS],
+                reference=reference_label(reference),
+                content=redact_sensitive_text(content[:MAX_RESOURCE_CHARACTERS]),
             )
         )
     return ResourceBundle(
-        requested=references,
+        requested=tuple(reference_label(reference) for reference in references),
         resources=tuple(resources),
         inaccessible=tuple(inaccessible),
     )
@@ -122,7 +124,9 @@ class ResourceReadError(RuntimeError):
 def _read_resource(reference: str) -> tuple[str, str]:
     parsed = urlparse(reference)
     if parsed.scheme in {"http", "https"}:
-        if parsed.netloc == "github.com" and _is_github_repository_url(parsed.path):
+        if parsed.scheme != "https":
+            raise ResourceReadError("only public HTTPS URLs are supported")
+        if parsed.netloc in {"github.com", "www.github.com"} and _is_github_repository_url(parsed.path):
             return _read_github_readme(reference, parsed.path)
         return _read_url(reference)
     if parsed.scheme:
@@ -146,14 +150,14 @@ def _read_local_file(reference: str) -> tuple[str, str]:
 def _read_url(reference: str) -> tuple[str, str]:
     request = Request(reference, headers={"User-Agent": "personal-ai-agent/0.1"})
     try:
-        with urlopen(request, timeout=20) as response:
+        with open_public_https(request, timeout=20) as response:
             content_type = response.headers.get_content_type()
             if content_type not in {"text/plain", "text/html", "application/json", "application/xml"}:
                 raise ResourceReadError(f"unsupported remote content type: {content_type}")
             raw = response.read(MAX_RESOURCE_BYTES + 1)
     except ResourceReadError:
         raise
-    except OSError as exc:
+    except (OSError, UnsafeResourceURL) as exc:
         raise ResourceReadError("remote resource could not be fetched") from exc
     if len(raw) > MAX_RESOURCE_BYTES:
         raise ResourceReadError(f"remote resource exceeds {MAX_RESOURCE_BYTES} byte limit")
@@ -178,9 +182,9 @@ def _read_github_readme(reference: str, path: str) -> tuple[str, str]:
         },
     )
     try:
-        with urlopen(request, timeout=20) as response:
+        with open_public_https(request, timeout=20) as response:
             raw = response.read(MAX_RESOURCE_BYTES + 1)
-    except OSError as exc:
+    except (OSError, UnsafeResourceURL) as exc:
         raise ResourceReadError("GitHub README could not be fetched") from exc
     if len(raw) > MAX_RESOURCE_BYTES:
         raise ResourceReadError(f"GitHub response exceeds {MAX_RESOURCE_BYTES} byte limit")
@@ -204,9 +208,19 @@ class _HTMLTextExtractor(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.parts: list[str] = []
+        self._ignored_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in {"script", "style", "noscript"}:
+            self._ignored_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"script", "style", "noscript"} and self._ignored_depth:
+            self._ignored_depth -= 1
 
     def handle_data(self, data: str) -> None:
-        self.parts.append(data)
+        if not self._ignored_depth:
+            self.parts.append(data)
 
     def text(self) -> str:
         return "\n".join(part.strip() for part in self.parts if part.strip())

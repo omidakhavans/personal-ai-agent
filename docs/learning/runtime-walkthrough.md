@@ -22,8 +22,8 @@ The command prints:
 ```text
 run_id: <run-id>
 status: completed
-state: runs/<run-id>/state.json
-artifacts: runs/<run-id>
+state artifact: state.json
+artifact directory: this run's directory under the configured runs directory
 ```
 
 Inspect the state:
@@ -177,9 +177,10 @@ The initial state has this shape:
 }
 ```
 
-The real file includes every stage, messages, timestamps, and non-secret inputs
-such as the repository path and model. The API key stays in the environment; it
-is never written into run state.
+The real file includes every stage, messages, timestamps, attempt counts, safe
+input labels, and the model name. Absolute repository/resource locations are
+kept in an ignored owner-only local resume configuration, not in shareable run
+state. The API key stays in the environment; it is never written to disk.
 
 File: `personal_ai_agent/stages.py`
 
@@ -316,8 +317,9 @@ collect_local_evidence(subject, repository)
 
 The collector uses subject-matched text excerpts and scoped Git metadata. It
 does not give the model shell or filesystem access. `OpenAIResponsesClient`
-makes one raw HTTP request, and `validate_report()` requires every `Verified`
-claim to cite an evidence ID that the collector actually supplied.
+makes one bounded raw HTTP request, and `validate_report()` requires every
+`Verified` claim or `Inference` to cite an evidence ID that the collector
+actually supplied.
 
 `EvidenceContextExecutor.execute()` does not research again. It reads the
 earlier reports in the same run, extracts their `E…` and `R…` IDs, then creates

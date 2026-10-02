@@ -21,9 +21,10 @@ The report is saved at:
 runs/<run-id>/research-report.md
 ```
 
-Use `--model <name>` on a new run to choose the model. The repository path and
-model name are saved in `state.json` so `resume <run-id>` can reconstruct the
-same stage configuration. The API key is never saved.
+Use `--model <name>` on a new run to choose the model. `state.json` stores a
+safe repository label and model name; the actual local repository location used
+by `resume <run-id>` is stored separately in ignored owner-only local config.
+The API key is never saved.
 
 ## Execution Path
 
@@ -87,6 +88,10 @@ Why this exists:
 The model never runs shell commands, reads files, or decides which extra paths
 to inspect. Those are application-controlled actions.
 
+Before excerpts or Git metadata enter the model prompt, common credential-shaped
+values are redacted as a best-effort safeguard. The report uses repository-
+relative references and a safe repository label rather than an absolute path.
+
 ## Model Boundary
 
 `OpenAIResponsesClient.generate_json()` sends one raw HTTP request to the
@@ -115,7 +120,7 @@ treated as data, not instructions for the model to follow.
 - is not the required JSON shape;
 - has an invalid claim status;
 - cites an evidence ID not in the local bundle; or
-- labels a claim `Verified` without citing evidence.
+- labels a `Verified` claim or `Inference` without citing evidence.
 
 If validation succeeds, `render_research_report()` creates a Markdown report in
 the Phase 1-compatible shape: subject, scope, implementation, decisions,

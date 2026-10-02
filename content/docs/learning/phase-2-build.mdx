@@ -1,0 +1,19 @@
+---
+title: Phase 2 Build Guide
+description: What changed when Codex's implicit runtime became local application code.
+---
+
+In Phase 1, Codex performed orchestration, tool selection, state tracking, and workflow judgment. Phase 2 rebuilds those responsibilities one narrow layer at a time.
+
+The first milestone was the runtime skeleton: CLI commands, run directories, persisted state, stage ordering, artifacts, and resume behavior. The second milestone made the first research stages real by adding bounded source collection, raw model calls, structured output validation, and traceable reports.
+
+The architectural rule is simple:
+
+```text
+Use deterministic application code for boundaries and persistence.
+Use a model only for bounded interpretation and generation.
+```
+
+This keeps a model useful without allowing it to silently decide what files to read, what evidence exists, or whether an artifact was actually written.
+
+The next functional capability is grounded `write-blog`, which should consume only the evidence-context artifact and remain a draft for human review.

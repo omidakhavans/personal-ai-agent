@@ -5,3 +5,8 @@ __pycache__/
 .ruff_cache/
 .venv/
 runs/
+node_modules/
+.next/
+.source/
+out/
+*.tsbuildinfo

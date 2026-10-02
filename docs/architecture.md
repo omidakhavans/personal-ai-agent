@@ -82,8 +82,15 @@ runs/<run-id>/state.json
 
 The state tracks the subject, run status, current stage, per-stage status, artifact names, messages, and timestamps.
 
-For real stages, it also records non-secret inputs needed to resume consistently,
-such as the repository path and selected model. API keys never enter this state.
+For real stages, state records safe, shareable input labels and the selected
+model. Local repository/resource locations needed for resume live in a separate,
+git-ignored owner-only configuration file. API keys never enter either file.
+
+The runtime writes state through a temporary file and an atomic replacement, and
+uses one POSIX file lock per run. This is ordinary durability and concurrency
+engineering, but it matters especially for agent workflows because a model call
+may be slow, paid, and non-deterministic. Each stage records its attempt count;
+an interrupted `running` stage runs again only after an explicit `resume`.
 
 ## Grounded Research
 
@@ -97,6 +104,12 @@ The collector reads a small, subject-matched set of repository files and scoped
 Git metadata. The model receives that selected bundle, not unrestricted filesystem
 access. The runtime validates that every `Verified` model claim cites a supplied
 evidence identifier before it persists the Markdown report.
+
+Before source text crosses the model boundary, the collector applies a small
+best-effort credential redactor. Artifact references use repository-relative
+paths or safe local labels, never absolute user-machine paths. Source selection
+still requires human judgment: automated redaction reduces common mistakes but
+cannot prove that a chosen source has no sensitive information.
 
 This does not prove every claim is true: the model can still misinterpret an
 excerpt. It does make the claim inspectable and prevents the model from citing
@@ -114,6 +127,12 @@ V1 does not discover web sources by itself. It reads only `--resource` values
 the user supplied. No supplied resources produces a `skipped` report, while
 supplied resources that all fail to load produce `blocked`. This keeps a missing
 optional enrichment step distinct from a failure to honor an explicit source.
+
+Remote resources are limited to public HTTPS URLs. The collector rejects private,
+loopback, link-local, and reserved addresses before a request and again on each
+redirect. This is a network safety boundary: without it, a user-supplied URL
+could cause the local runtime to fetch an internal service and forward its text
+to a remote model.
 
 The report uses resource IDs such as `R1`. Source facts and interpretations must
 cite those IDs; the runtime rejects invented resource references before writing
@@ -150,6 +169,10 @@ Resume behavior means:
 - skipped stages remain skipped
 - failed or blocked runs stay stopped
 - interrupted `running` stages can be retried
+
+The runtime also verifies previously completed artifacts before resuming. A
+state file alone is not enough evidence that an earlier stage actually produced
+the file a later stage needs.
 
 This lets the runtime recover without losing the audit trail.
 
