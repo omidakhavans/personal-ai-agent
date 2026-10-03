@@ -7,6 +7,21 @@ description: Trace one CLI run from command input to persisted artifacts.
 
 `python -m personal_ai_agent` executes `personal_ai_agent/__main__.py`, which calls `main()` in `personal_ai_agent/cli.py`.
 
+## Read the source
+
+Public code references are encouraged in these guides. Use commit-pinned GitHub
+links when explaining exact behavior, so the cited lines do not drift with
+`main`:
+
+- [CLI routing: `main()`](https://github.com/omidakhavans/personal-ai-agent/blob/eec473337e8b81afcafb0adb99002c17d7a46106/personal_ai_agent/cli.py#L71-L129)
+- [Run creation: `Orchestrator.start()`](https://github.com/omidakhavans/personal-ai-agent/blob/eec473337e8b81afcafb0adb99002c17d7a46106/personal_ai_agent/runtime.py#L51-L69)
+- [Transitions: `Orchestrator._advance()`](https://github.com/omidakhavans/personal-ai-agent/blob/eec473337e8b81afcafb0adb99002c17d7a46106/personal_ai_agent/runtime.py#L95-L188)
+- [Resume: `Orchestrator.resume()`](https://github.com/omidakhavans/personal-ai-agent/blob/eec473337e8b81afcafb0adb99002c17d7a46106/personal_ai_agent/runtime.py#L71-L93)
+- [State persistence: `state.py`](https://github.com/omidakhavans/personal-ai-agent/blob/eec473337e8b81afcafb0adb99002c17d7a46106/personal_ai_agent/state.py#L54-L176)
+
+These are public implementation references, not local run artifacts. Update a
+link and its explanation together whenever the referenced behavior changes.
+
 The CLI parses `run`, `resume`, and `show-state`. It constructs a routed stage executor and passes only safe labels into shareable run state. Actual local locations required for a later resume are kept separately in ignored local configuration.
 
 ## Run creation

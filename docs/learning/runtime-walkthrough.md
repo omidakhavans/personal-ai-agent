@@ -6,6 +6,22 @@ The implementation is intentionally small. The runtime lifecycle was built first
 the `research-work`, `research-resources`, and `build-evidence-context` stages
 now make grounded model calls while the remaining stages are placeholders.
 
+## Read The Code With This Guide
+
+Public source references are part of this learning material. The links below
+use a commit-pinned GitHub revision so the cited lines remain stable even when
+the `main` branch changes. They point to public implementation code, not to
+local run data or machine-specific paths.
+
+- [CLI command routing: `main()`](https://github.com/omidakhavans/personal-ai-agent/blob/eec473337e8b81afcafb0adb99002c17d7a46106/personal_ai_agent/cli.py#L71-L129)
+- [Run creation: `Orchestrator.start()`](https://github.com/omidakhavans/personal-ai-agent/blob/eec473337e8b81afcafb0adb99002c17d7a46106/personal_ai_agent/runtime.py#L51-L69)
+- [Workflow transitions: `Orchestrator._advance()`](https://github.com/omidakhavans/personal-ai-agent/blob/eec473337e8b81afcafb0adb99002c17d7a46106/personal_ai_agent/runtime.py#L95-L188)
+- [Resume behavior: `Orchestrator.resume()`](https://github.com/omidakhavans/personal-ai-agent/blob/eec473337e8b81afcafb0adb99002c17d7a46106/personal_ai_agent/runtime.py#L71-L93)
+- [State and atomic persistence](https://github.com/omidakhavans/personal-ai-agent/blob/eec473337e8b81afcafb0adb99002c17d7a46106/personal_ai_agent/state.py#L54-L176)
+
+When the implementation changes materially, update the relevant permalink and
+explanation in the same documentation change.
+
 ## How To Run It
 
 From the repository root:

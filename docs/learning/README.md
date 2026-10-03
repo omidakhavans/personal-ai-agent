@@ -23,6 +23,15 @@ The recommended way to learn is to read one guide, open the named files beside
 it, then run the focused tests. Change one small behavior only after you can
 predict which state, artifact, and test will change.
 
+## Public Code References
+
+The learning guides may cite public source code directly. Prefer a
+repository-relative path, named function or class, and a commit-pinned GitHub
+line permalink when explaining a specific implementation. This makes the guide
+traceable to the code it teaches. It is safe because this repository is public;
+the prohibited material is private machine paths, generated local runs,
+credentials, and other local data.
+
 ## Current Boundary
 
 The current runtime has three real stages:
