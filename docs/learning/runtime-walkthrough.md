@@ -2,26 +2,24 @@
 
 This document teaches how the Phase 2 runtime currently works. It is not general project documentation. It traces one complete CLI execution from command input to final stage completion, then explains failure, blocking, and resume behavior.
 
-The implementation is intentionally small. The runtime lifecycle was built first;
-the `research-work`, `research-resources`, `build-evidence-context`, and
-`write-blog` stages now make grounded model calls while later review and social
-stages remain placeholders.
+The implementation is intentionally small. Every content stage now has a real,
+bounded contract: research, context construction, blog writing, evidence-aware
+review, explicit social approval, and draft-only platform transformation.
 
 ## Read The Code With This Guide
 
 Public source references are part of this learning material. The links below
-use a commit-pinned GitHub revision so the cited lines remain stable even when
-the `main` branch changes. They point to public implementation code, not to
-local run data or machine-specific paths.
+point to public implementation code, not to local run data or machine-specific
+paths. Pin a link to the current commit when using it to teach a specific line.
 
-- [CLI command routing: `main()`](https://github.com/omidakhavans/personal-ai-agent/blob/eec473337e8b81afcafb0adb99002c17d7a46106/personal_ai_agent/cli.py#L71-L129)
-- [Run creation: `Orchestrator.start()`](https://github.com/omidakhavans/personal-ai-agent/blob/eec473337e8b81afcafb0adb99002c17d7a46106/personal_ai_agent/runtime.py#L51-L69)
-- [Workflow transitions: `Orchestrator._advance()`](https://github.com/omidakhavans/personal-ai-agent/blob/eec473337e8b81afcafb0adb99002c17d7a46106/personal_ai_agent/runtime.py#L95-L188)
-- [Resume behavior: `Orchestrator.resume()`](https://github.com/omidakhavans/personal-ai-agent/blob/eec473337e8b81afcafb0adb99002c17d7a46106/personal_ai_agent/runtime.py#L71-L93)
-- [State and atomic persistence](https://github.com/omidakhavans/personal-ai-agent/blob/eec473337e8b81afcafb0adb99002c17d7a46106/personal_ai_agent/state.py#L54-L176)
+- [CLI routing: `cli.py`](https://github.com/omidakhavans/personal-ai-agent/blob/main/personal_ai_agent/cli.py)
+- [Workflow transitions and approval: `runtime.py`](https://github.com/omidakhavans/personal-ai-agent/blob/main/personal_ai_agent/runtime.py)
+- [State and migration: `state.py`](https://github.com/omidakhavans/personal-ai-agent/blob/main/personal_ai_agent/state.py)
+- [Review: `review_blog.py`](https://github.com/omidakhavans/personal-ai-agent/blob/main/personal_ai_agent/review_blog.py)
+- [Social transformations: `social_writing.py`](https://github.com/omidakhavans/personal-ai-agent/blob/main/personal_ai_agent/social_writing.py)
 
-When the implementation changes materially, update the relevant permalink and
-explanation in the same documentation change.
+When the implementation changes materially, update the relevant source reference
+and explanation in the same documentation change.
 
 ## How To Run It
 
@@ -38,7 +36,7 @@ The command prints:
 
 ```text
 run_id: <run-id>
-status: completed
+status: awaiting_approval
 state artifact: state.json
 artifact directory: this run's directory under the configured runs directory
 ```
@@ -54,6 +52,16 @@ Resume a run:
 ```bash
 python -m personal_ai_agent resume <run-id>
 ```
+
+After reviewing a passing `blog-review.md`, continue the social stages with:
+
+```bash
+python -m personal_ai_agent approve-social <run-id> \
+  --notes "Reviewed the source boundaries."
+```
+
+The approval record includes the reviewed blog's SHA-256 fingerprint, so a
+changed article requires another review and another approval.
 
 Run the tests:
 
@@ -213,6 +221,7 @@ research-resources -> resources-report.md
 build-evidence-context -> context-brief.md
 write-blog -> blog-draft.md
 review-blog -> blog-review.md
+approve-social -> approval.md
 write-linkedin -> linkedin-draft.md
 write-x -> x-draft.md
 ```
@@ -246,6 +255,7 @@ For each stage, it inspects the stage status:
 - `skipped`: skip it
 - `blocked`: stop the run as blocked
 - `failed`: stop the run as failed
+- `awaiting_approval`: stop until the owner explicitly approves social drafting
 - `pending`: execute it
 - anything else: raise a runtime error
 
@@ -319,9 +329,10 @@ result = self.executor.execute(
 For a CLI-created run, `build_content_executor()` in `personal_ai_agent/cli.py`
 creates a `RoutedStageExecutor`. It routes `research-work` to
 `ResearchWorkExecutor`, `research-resources` to `ResourceResearchExecutor`, and
-`build-evidence-context` to `EvidenceContextExecutor`. It routes `write-blog`
-to `BlogWriterExecutor`; the review and social stages use `PlaceholderStageExecutor`
-for now.
+`build-evidence-context` to `EvidenceContextExecutor`, `write-blog` to
+`BlogWriterExecutor`, `review-blog` to `BlogReviewerExecutor`, and the social
+stages to their dedicated executors. `approve-social` is intentionally a
+deterministic human checkpoint rather than a model call.
 
 `ResearchWorkExecutor.execute()` has a small grounded sequence:
 
@@ -354,7 +365,7 @@ the supplied `E...` or `R...` IDs. The runtime validates those IDs, then writes
 Why it exists:
 
 - Ordinary software-engineering reason: the executor separates "how a stage runs" from "how the workflow advances."
-- Agent-system reason: each stage can call a model, use tools, and decide whether to complete, block, or fail without changing the orchestrator. The remaining placeholders can follow the same pattern.
+- Agent-system reason: each stage can call a model, use tools, and decide whether to complete, block, or await human approval without changing the orchestrator.
 
 This is the first runtime boundary that starts to look agent-shaped: the stage executor is where model intelligence and tool use will eventually live.
 
@@ -381,6 +392,7 @@ completed
 skipped
 blocked
 failed
+awaiting_approval
 ```
 
 If the result is valid, the orchestrator records:
@@ -415,6 +427,7 @@ research-resources
 build-evidence-context
 write-blog
 review-blog
+approve-social
 write-linkedin
 write-x
 ```
@@ -433,7 +446,7 @@ Then it writes the final `state.json`.
 Why it exists:
 
 - Ordinary software-engineering reason: a workflow needs a final success condition.
-- Agent-system reason: downstream processes need to know whether the full chain is usable. A completed run means the grounded research, context, and blog-draft stages, plus the remaining placeholder stages, reached terminal success for this version.
+- Agent-system reason: downstream processes need to know that the full chain used a reviewed, explicitly approved canonical article before producing derivative drafts.
 
 In the future, "completed" will not mean "published" or "perfect." It will mean the runtime successfully produced draft artifacts that still need human review.
 
@@ -453,6 +466,7 @@ resources-report.md
 context-brief.md
 blog-draft.md
 blog-review.md
+approval.md
 linkedin-draft.md
 x-draft.md
 ```
@@ -461,7 +475,10 @@ Responsible code:
 
 - `personal_ai_agent/stages.py`
 - `BlogWriterExecutor.execute(...)` in `personal_ai_agent/write_blog.py`
-- `PlaceholderStageExecutor.execute(...)` for later review and social stages
+- `BlogReviewerExecutor.execute(...)` in `personal_ai_agent/review_blog.py`
+- `SocialApprovalExecutor.execute(...)` in `personal_ai_agent/approval.py`
+- `LinkedInWriterExecutor.execute(...)` and `XWriterExecutor.execute(...)` in
+  `personal_ai_agent/social_writing.py`
 
 Why artifacts exist:
 
@@ -584,6 +601,7 @@ If the run is already terminal:
 completed
 blocked
 failed
+awaiting_approval
 ```
 
 it returns the state and does not continue.
@@ -628,7 +646,7 @@ Test coverage:
 | Stage contract | `personal_ai_agent/stages.py` | `Stage`, `StageResult`, `StageExecutor` | Defines how stages and executors communicate. |
 | Workflow definition | `personal_ai_agent/stages.py` | `WORKFLOW_STAGES` | Defines deterministic stage order and artifact names. |
 | Grounded blog writer | `personal_ai_agent/write_blog.py` | `BlogWriterExecutor.execute()` | Turns prepared evidence context into a cited draft for review. |
-| Placeholder execution | `personal_ai_agent/stages.py` | `PlaceholderStageExecutor.execute()` | Proves runtime behavior before LLM capability work. |
+| Fallback execution | `personal_ai_agent/stages.py` | `PlaceholderStageExecutor.execute()` | Keeps the routing interface testable when a caller intentionally omits a stage executor. |
 | Test executor | `personal_ai_agent/stages.py` | `MappingStageExecutor` | Makes failure/blocking/resume scenarios easy to test. |
 
 ## Software Engineering vs Agent-System Concepts
@@ -658,7 +676,8 @@ The overlap matters. A good agent runtime is mostly careful software engineering
 
 ## Documentation Pattern For Future Stages
 
-Each real stage should get similar learning documentation when it replaces a placeholder.
+Each stage has similar learning documentation because every capability now has a
+distinct input boundary and output contract.
 
 Suggested future docs:
 
@@ -666,7 +685,9 @@ Suggested future docs:
 docs/learning/stage-research-work.md
 docs/learning/stage-research-resources.md
 docs/learning/stage-build-evidence-context.md
+docs/learning/stage-write-blog.md
 docs/learning/stage-review-blog.md
+docs/learning/stage-approve-social.md
 docs/learning/stage-write-linkedin.md
 docs/learning/stage-write-x.md
 ```
@@ -678,7 +699,7 @@ Each stage walkthrough should explain:
 - Artifact it writes.
 - Prompt or deterministic logic it uses.
 - Tools it is allowed to use.
-- How it decides `completed`, `blocked`, or `failed`.
+- How it decides `completed`, `blocked`, `failed`, or `awaiting_approval`.
 - What evidence or source references it preserves.
 - What hallucination or quality risks it controls.
 - How to test it in isolation.
@@ -691,10 +712,9 @@ This matters because every stage will eventually combine ordinary code with agen
    - Modify `tests/test_runtime.py` to prove a run can be created in a custom runs directory.
    - Run `python -m unittest discover -s tests`.
 
-2. Add a new placeholder stage.
-   - Add `review-social` to `WORKFLOW_STAGES` in `personal_ai_agent/stages.py`.
-   - Decide its artifact name.
-   - Update tests that assume the final artifact is `x-draft.md`.
+2. Add an approval-expiry rule.
+   - Make social approval expire when the blog-draft fingerprint changes.
+   - Add tests proving that a changed draft cannot reuse an older approval.
 
 3. Add a `list-runs` CLI command.
    - Implement it in `personal_ai_agent/cli.py`.

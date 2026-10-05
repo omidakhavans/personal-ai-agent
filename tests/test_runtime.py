@@ -28,8 +28,21 @@ from personal_ai_agent.research_work import (
     collect_local_evidence,
 )
 from personal_ai_agent.model_client import OpenAIResponsesClient
+from personal_ai_agent.approval import SocialApprovalExecutor
+from personal_ai_agent.content_artifacts import collect_article_inputs
+from personal_ai_agent.review_blog import (
+    BlogReviewerExecutor,
+    BlogReviewerSettings,
+    validate_review,
+)
 from personal_ai_agent.runtime import Orchestrator
+from personal_ai_agent.social_writing import (
+    LinkedInWriterExecutor,
+    SocialWriterSettings,
+    XWriterExecutor,
+)
 from personal_ai_agent.stages import (
+    STAGE_AWAITING_APPROVAL,
     STAGE_BLOCKED,
     STAGE_COMPLETED,
     STAGE_FAILED,
@@ -42,6 +55,7 @@ from personal_ai_agent.stages import (
     StageResult,
 )
 from personal_ai_agent.state import (
+    RUN_AWAITING_APPROVAL,
     RUN_BLOCKED,
     RUN_COMPLETED,
     RUN_FAILED,
@@ -214,7 +228,7 @@ class RuntimeTests(unittest.TestCase):
 
             migrated = read_state(state_path)
 
-            self.assertEqual(migrated["state_version"], 2)
+            self.assertEqual(migrated["state_version"], 3)
             self.assertTrue(all(stage["attempts"] == 0 for stage in migrated["stages"].values()))
 
     def test_private_resume_configuration_is_not_part_of_run_state(self) -> None:
@@ -365,6 +379,55 @@ def valid_blog_draft() -> dict[str, Any]:
         ],
         "key_technical_takeaways": [connection_paragraph],
         "review_caveats": ["The evidence does not establish production impact or measured results."],
+    }
+
+
+def valid_blog_review() -> dict[str, Any]:
+    return {
+        "approval_status": "ready_for_human_review",
+        "overall_assessment": "The draft stays within the supplied evidence and keeps its limitation visible.",
+        "findings": [
+            {
+                "severity": "Verified",
+                "category": "grounding",
+                "finding": "The implementation claim is supported by the cited work evidence.",
+                "article_excerpt": "The repository documents a tool-calling feature, which gives the article a concrete implementation anchor.",
+                "work_evidence_ids": ["E1"],
+                "resource_ids": [],
+                "recommended_change": "Keep the claim tied to the repository evidence.",
+            }
+        ],
+        "review_caveats": ["The evidence does not establish production impact or measured results."],
+    }
+
+
+def valid_linkedin_draft() -> dict[str, Any]:
+    paragraph = {
+        "text": "Building tool calling reminded me that the useful boundary is often the one you can inspect.",
+        "work_evidence_ids": ["E1"],
+        "resource_ids": [],
+    }
+    return {
+        "post_paragraphs": [paragraph],
+        "link_placement": "Place the article link after the final paragraph.",
+        "main_technical_insight": paragraph,
+        "claims_requiring_human_attention": ["Review the post against the article before publishing."],
+    }
+
+
+def valid_x_draft() -> dict[str, Any]:
+    post = {
+        "text": "Tool calling became more useful once I could trace the feature back to concrete repository evidence.",
+        "work_evidence_ids": ["E1"],
+        "resource_ids": [],
+    }
+    return {
+        "recommended_format": "single",
+        "format_rationale": "The core lesson fits in one post.",
+        "posts": [post],
+        "main_technical_insight": post,
+        "link_placement": "Add the article link in a reply if useful.",
+        "claims_requiring_human_attention": ["Confirm the wording still matches the reviewed article."],
     }
 class ResearchWorkTests(unittest.TestCase):
     def test_collects_narrow_subject_evidence(self) -> None:
@@ -747,6 +810,255 @@ class WriteBlogTests(unittest.TestCase):
 
             with self.assertRaisesRegex(RuntimeError, "unknown work evidence"):
                 validate_blog_draft(draft, collect_blog_inputs(run_dir))
+
+
+def write_reviewable_article(run_dir: Path) -> None:
+    (run_dir / "context-brief.md").write_text(
+        "\n".join(
+            [
+                "# Evidence Context Brief",
+                "",
+                "## Recommended Article Focus",
+                "",
+                "- ready: Explain a grounded tool-calling lesson. (Evidence: Work: E1)",
+                "",
+                "## Source And Evidence References",
+                "",
+                "- Work evidence `E1`: `README.md`",
+                "- External resource `R1`: `tool-calling.md`",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "blog-draft.md").write_text(
+        "\n".join(
+            [
+                "# Blog Draft",
+                "",
+                "## Article Draft",
+                "",
+                "The repository documents a tool-calling feature, which gives the article a concrete implementation anchor. (Evidence: Work: E1)",
+                "",
+                "## Status",
+                "",
+                "- draft_for_human_review",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+class ReviewAndSocialTests(unittest.TestCase):
+    def test_review_writes_a_fingerprinted_evidence_aware_artifact(self) -> None:
+        with TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            run_dir.mkdir()
+            write_reviewable_article(run_dir)
+            model = FakeModelClient(valid_blog_review())
+            reviewer = BlogReviewerExecutor(
+                settings=BlogReviewerSettings(model="test-model"), client=model
+            )
+
+            result = reviewer.execute(
+                stage=next(stage for stage in WORKFLOW_STAGES if stage.name == "review-blog"),
+                subject="Tool calling",
+                run_dir=run_dir,
+            )
+
+            review = (run_dir / "blog-review.md").read_text(encoding="utf-8")
+            self.assertEqual(result.status, STAGE_COMPLETED)
+            self.assertEqual(len(model.calls), 1)
+            self.assertIn(collect_article_inputs(run_dir).blog_sha256, review)
+            self.assertIn("ready_for_human_review", review)
+            self.assertIn("Verified - grounding", review)
+
+    def test_review_blocks_social_stages_when_revision_is_required(self) -> None:
+        with TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            run_dir.mkdir()
+            write_reviewable_article(run_dir)
+            report = valid_blog_review()
+            report["approval_status"] = "needs_revision"
+            report["findings"] = [
+                {
+                    "severity": "Critical",
+                    "category": "grounding",
+                    "finding": "The claim lacks the required evidence boundary.",
+                    "article_excerpt": "The repository documents a tool-calling feature, which gives the article a concrete implementation anchor.",
+                    "work_evidence_ids": [],
+                    "resource_ids": [],
+                    "recommended_change": "Rewrite the claim to match the available evidence.",
+                }
+            ]
+            reviewer = BlogReviewerExecutor(
+                settings=BlogReviewerSettings(model="test-model"), client=FakeModelClient(report)
+            )
+
+            result = reviewer.execute(
+                stage=next(stage for stage in WORKFLOW_STAGES if stage.name == "review-blog"),
+                subject="Tool calling",
+                run_dir=run_dir,
+            )
+
+            self.assertEqual(result.status, STAGE_BLOCKED)
+            self.assertIn("needs_revision", (run_dir / "blog-review.md").read_text(encoding="utf-8"))
+
+    def test_approved_run_generates_both_social_drafts_only_after_owner_approval(self) -> None:
+        with TemporaryDirectory() as tmp:
+            resource_path = Path(tmp) / "tool-calling.md"
+            resource_path.write_text("# Tool calling\n\nA model can request a tool.\n", encoding="utf-8")
+            repository = Path(tmp) / "repository"
+            repository.mkdir()
+            (repository / "README.md").write_text("Tool calling is used here.\n", encoding="utf-8")
+            runs_dir = Path(tmp) / "runs"
+            executor = RoutedStageExecutor(
+                research_work=ResearchWorkExecutor(
+                    settings=ResearchWorkSettings(repository=repository, model="test-model"),
+                    client=FakeModelClient(valid_research_report()),
+                ),
+                research_resources=ResourceResearchExecutor(
+                    settings=ResearchResourcesSettings(references=(str(resource_path),), model="test-model"),
+                    client=FakeModelClient(valid_resource_report()),
+                ),
+                evidence_context=EvidenceContextExecutor(
+                    settings=EvidenceContextSettings(model="test-model"),
+                    client=FakeModelClient(valid_context_brief()),
+                ),
+                write_blog=BlogWriterExecutor(
+                    settings=BlogWriterSettings(model="test-model"), client=FakeModelClient(valid_blog_draft())
+                ),
+                review_blog=BlogReviewerExecutor(
+                    settings=BlogReviewerSettings(model="test-model"), client=FakeModelClient(valid_blog_review())
+                ),
+                approve_social=SocialApprovalExecutor(),
+                write_linkedin=LinkedInWriterExecutor(
+                    settings=SocialWriterSettings(model="test-model"), client=FakeModelClient(valid_linkedin_draft())
+                ),
+                write_x=XWriterExecutor(
+                    settings=SocialWriterSettings(model="test-model"), client=FakeModelClient(valid_x_draft())
+                ),
+            )
+            runtime = Orchestrator(runs_dir=runs_dir, executor=executor)
+
+            awaiting_approval = runtime.start("What I learned about tool calling")
+            run_dir = paths_for_run(runs_dir, awaiting_approval["run_id"]).run_dir
+            self.assertEqual(awaiting_approval["status"], RUN_AWAITING_APPROVAL)
+            self.assertEqual(awaiting_approval["stages"]["approve-social"]["status"], STAGE_AWAITING_APPROVAL)
+            self.assertFalse((run_dir / "linkedin-draft.md").exists())
+            self.assertEqual(
+                runtime.resume(awaiting_approval["run_id"])["status"],
+                RUN_AWAITING_APPROVAL,
+            )
+
+            completed = runtime.approve_social(awaiting_approval["run_id"], "Reviewed the source boundaries.")
+
+            self.assertEqual(completed["status"], RUN_COMPLETED)
+            self.assertIn("- approved", (run_dir / "approval.md").read_text(encoding="utf-8"))
+            self.assertIn("draft_for_review", (run_dir / "linkedin-draft.md").read_text(encoding="utf-8"))
+            self.assertIn("Recommended Format", (run_dir / "x-draft.md").read_text(encoding="utf-8"))
+
+    def test_social_writer_blocks_when_review_fingerprint_is_stale(self) -> None:
+        with TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            run_dir.mkdir()
+            write_reviewable_article(run_dir)
+            (run_dir / "blog-review.md").write_text(
+                "\n".join(
+                    [
+                        "# Blog Review",
+                        "",
+                        "## Reviewed Article Identity",
+                        "",
+                        "- Article artifact: `blog-draft.md`",
+                        "- SHA-256: `" + "0" * 64 + "`",
+                        "",
+                        "## Approval Status",
+                        "",
+                        "- ready_for_human_review",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (run_dir / "approval.md").write_text(
+                "\n".join(
+                    [
+                        "# Social Transformation Approval",
+                        "",
+                        "## Status",
+                        "",
+                        "- approved",
+                        "",
+                        "## Approved Article Identity",
+                        "",
+                        "- Reviewed draft SHA-256: `" + "0" * 64 + "`",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            model = FakeModelClient(valid_linkedin_draft())
+            writer = LinkedInWriterExecutor(
+                settings=SocialWriterSettings(model="test-model"), client=model
+            )
+
+            result = writer.execute(
+                stage=next(stage for stage in WORKFLOW_STAGES if stage.name == "write-linkedin"),
+                subject="Tool calling",
+                run_dir=run_dir,
+            )
+
+            self.assertEqual(result.status, STAGE_BLOCKED)
+            self.assertEqual(model.calls, [])
+            self.assertIn("fingerprint", (run_dir / "linkedin-draft.md").read_text(encoding="utf-8"))
+
+    def test_social_writer_blocks_when_approval_fingerprint_is_stale(self) -> None:
+        with TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            run_dir.mkdir()
+            write_reviewable_article(run_dir)
+            reviewer = BlogReviewerExecutor(
+                settings=BlogReviewerSettings(model="test-model"),
+                client=FakeModelClient(valid_blog_review()),
+            )
+            reviewer.execute(
+                stage=next(stage for stage in WORKFLOW_STAGES if stage.name == "review-blog"),
+                subject="Tool calling",
+                run_dir=run_dir,
+            )
+            (run_dir / "approval.md").write_text(
+                "\n".join(
+                    [
+                        "# Social Transformation Approval",
+                        "",
+                        "## Status",
+                        "",
+                        "- approved",
+                        "",
+                        "## Approved Article Identity",
+                        "",
+                        "- Reviewed draft SHA-256: `" + "0" * 64 + "`",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            model = FakeModelClient(valid_linkedin_draft())
+            writer = LinkedInWriterExecutor(
+                settings=SocialWriterSettings(model="test-model"), client=model
+            )
+
+            result = writer.execute(
+                stage=next(stage for stage in WORKFLOW_STAGES if stage.name == "write-linkedin"),
+                subject="Tool calling",
+                run_dir=run_dir,
+            )
+
+            self.assertEqual(result.status, STAGE_BLOCKED)
+            self.assertEqual(model.calls, [])
+            self.assertIn("approval.md does not match", (run_dir / "linkedin-draft.md").read_text(encoding="utf-8"))
 
 
 class ModelClientTests(unittest.TestCase):

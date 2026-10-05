@@ -12,11 +12,12 @@ subject
   -> build-evidence-context
   -> write-blog
   -> review-blog
+  -> approve-social
   -> write-linkedin
   -> write-x
 ```
 
-The first four stages are real today. Review and social stages still write placeholder artifacts so the runtime lifecycle can be learned and tested before each capability is implemented.
+Every stage is real. A passing blog review pauses at `approve-social`; only an explicit owner decision allows the two social draft stages to run. No stage publishes content.
 
 ## State transitions
 

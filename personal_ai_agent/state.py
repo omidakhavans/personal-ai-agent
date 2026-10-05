@@ -14,14 +14,15 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from .stages import STAGE_PENDING, WORKFLOW_STAGES
+from .stages import STAGE_PENDING, STAGE_SKIPPED, WORKFLOW_STAGES
 
 RUN_PENDING = "pending"
 RUN_RUNNING = "running"
 RUN_COMPLETED = "completed"
 RUN_BLOCKED = "blocked"
 RUN_FAILED = "failed"
-STATE_VERSION = 2
+RUN_AWAITING_APPROVAL = "awaiting_approval"
+STATE_VERSION = 3
 RUN_ID_PATTERN = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{8}$")
 
 
@@ -188,14 +189,14 @@ def _validate_state(state: Any) -> None:
         raise StateError("Run state contains an invalid run id.")
     if not isinstance(state["subject"], str) or not isinstance(state["inputs"], dict):
         raise StateError("Run state has invalid inputs.")
-    if state["status"] not in {RUN_PENDING, RUN_RUNNING, RUN_COMPLETED, RUN_BLOCKED, RUN_FAILED}:
+    if state["status"] not in {RUN_PENDING, RUN_RUNNING, RUN_COMPLETED, RUN_BLOCKED, RUN_FAILED, RUN_AWAITING_APPROVAL}:
         raise StateError("Run state has an invalid run status.")
     if not isinstance(state["stages"], dict):
         raise StateError("Run state has invalid stage data.")
     for stage in WORKFLOW_STAGES:
         stage_state = state["stages"].get(stage.name)
         if not isinstance(stage_state, dict) or stage_state.get("status") not in {
-            "pending", "running", "completed", "skipped", "blocked", "failed",
+            "pending", "running", "completed", "skipped", "blocked", "failed", "awaiting_approval",
         }:
             raise StateError(f"Run state has invalid data for stage {stage.name!r}.")
         if not isinstance(stage_state.get("attempts"), int) or stage_state["attempts"] < 0:
@@ -211,11 +212,25 @@ def _validate_private_config(config: dict[str, Any]) -> None:
 
 def _migrate_state(state: Any) -> Any:
     """Keep pre-hardening local runs readable while preserving their audit data."""
-    if not isinstance(state, dict) or state.get("state_version") not in {None, 1}:
+    if not isinstance(state, dict) or state.get("state_version") not in {None, 1, 2}:
         return state
     migrated = deepcopy(state)
-    migrated["state_version"] = STATE_VERSION
-    for stage in migrated.get("stages", {}).values():
-        if isinstance(stage, dict):
-            stage.setdefault("attempts", 0)
+    if migrated.get("state_version") in {None, 1}:
+        migrated["state_version"] = 2
+        for stage in migrated.get("stages", {}).values():
+            if isinstance(stage, dict):
+                stage.setdefault("attempts", 0)
+    if migrated.get("state_version") == 2:
+        stages = migrated.setdefault("stages", {})
+        if "approve-social" not in stages:
+            later_statuses = [stages.get(name, {}).get("status") for name in ("write-linkedin", "write-x")]
+            stages["approve-social"] = {
+                "status": STAGE_SKIPPED if migrated.get("status") == RUN_COMPLETED or any(status in {"completed", "skipped"} for status in later_statuses) else STAGE_PENDING,
+                "artifact": "approval.md",
+                "message": "Legacy run predates the explicit social-approval checkpoint.",
+                "attempts": 0,
+                "started_at": None,
+                "finished_at": None,
+            }
+        migrated["state_version"] = STATE_VERSION
     return migrated

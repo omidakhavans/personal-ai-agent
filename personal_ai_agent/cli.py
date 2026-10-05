@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .evidence_context import EvidenceContextExecutor, EvidenceContextSettings
+from .approval import SocialApprovalExecutor
 from .model_client import OpenAIResponsesClient
 from .privacy import reference_label, repository_label
 from .research_resources import ResearchResourcesSettings, ResourceResearchExecutor
@@ -16,6 +17,8 @@ from .runtime import Orchestrator, RuntimeErrorWithContext
 from .state import StateError, paths_for_run, read_private_config, read_state
 from .stages import RoutedStageExecutor
 from .write_blog import BlogWriterExecutor, BlogWriterSettings
+from .review_blog import BlogReviewerExecutor, BlogReviewerSettings
+from .social_writing import LinkedInWriterExecutor, SocialWriterSettings, XWriterExecutor
 
 
 DEFAULT_RUNS_DIR = Path("runs")
@@ -62,6 +65,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         help="Override the resources saved with the run. Repeat as needed.",
     )
+
+    approval_parser = subparsers.add_parser("approve-social", help="Approve a reviewed blog and create social drafts.")
+    approval_parser.add_argument("run_id", help="Run id awaiting social-transformation approval.")
+    approval_parser.add_argument("--notes", help="Optional approval notes recorded in approval.md.")
+    approval_parser.add_argument("--repository", help="Override the repository saved with the run.")
+    approval_parser.add_argument("--model", help="Override the model saved with the run.")
+    approval_parser.add_argument("--resource", action="append", help="Override resources saved with the run.")
 
     state_parser = subparsers.add_parser("show-state", help="Print a run state.json.")
     state_parser.add_argument("run_id", help="Run id to inspect.")
@@ -123,6 +133,29 @@ def main(argv: Sequence[str] | None = None) -> int:
             paths = paths_for_run(runs_dir, args.run_id)
             print(json.dumps(read_state(paths.state_path), indent=2, sort_keys=True))
             return 0
+
+        if args.command == "approve-social":
+            try:
+                private_config = read_private_config(runs_dir, args.run_id)
+            except StateError:
+                if not args.repository or not args.model:
+                    raise
+                private_config = {
+                    "repository": args.repository,
+                    "resources": args.resource or [],
+                    "model": args.model,
+                }
+            repository = args.repository or private_config.get("repository")
+            model = args.model or private_config.get("model")
+            resources = tuple(args.resource) if args.resource is not None else tuple(private_config.get("resources", []))
+            if not repository or not model:
+                raise RuntimeErrorWithContext("This run has no saved research configuration. Pass --repository and --model.")
+            state = Orchestrator(
+                runs_dir=runs_dir,
+                executor=build_content_executor(Path(repository), resources, model),
+            ).approve_social(args.run_id, args.notes)
+            print_run_result(state, runs_dir)
+            return 0
     except (RuntimeErrorWithContext, StateError) as exc:
         parser.error(str(exc))
 
@@ -159,11 +192,20 @@ def build_content_executor(
         settings=BlogWriterSettings(model=model),
         client=OpenAIResponsesClient(max_output_tokens=2_400),
     )
+    review_blog = BlogReviewerExecutor(
+        settings=BlogReviewerSettings(model=model),
+        client=OpenAIResponsesClient(max_output_tokens=2_400),
+    )
+    social_settings = SocialWriterSettings(model=model)
     return RoutedStageExecutor(
         research_work=research_work,
         research_resources=research_resources,
         evidence_context=evidence_context,
         write_blog=write_blog,
+        review_blog=review_blog,
+        approve_social=SocialApprovalExecutor(),
+        write_linkedin=LinkedInWriterExecutor(settings=social_settings, client=OpenAIResponsesClient(max_output_tokens=1_600)),
+        write_x=XWriterExecutor(settings=social_settings, client=OpenAIResponsesClient(max_output_tokens=1_600)),
     )
 
 

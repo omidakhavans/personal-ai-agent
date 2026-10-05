@@ -13,12 +13,14 @@ STAGE_COMPLETED = "completed"
 STAGE_SKIPPED = "skipped"
 STAGE_BLOCKED = "blocked"
 STAGE_FAILED = "failed"
+STAGE_AWAITING_APPROVAL = "awaiting_approval"
 
 TERMINAL_STAGE_STATUSES = {
     STAGE_COMPLETED,
     STAGE_SKIPPED,
     STAGE_BLOCKED,
     STAGE_FAILED,
+    STAGE_AWAITING_APPROVAL,
 }
 
 
@@ -35,6 +37,7 @@ WORKFLOW_STAGES: tuple[Stage, ...] = (
     Stage("build-evidence-context", "context-brief.md", "build-evidence-context"),
     Stage("write-blog", "blog-draft.md", "write-blog"),
     Stage("review-blog", "blog-review.md", "review-blog"),
+    Stage("approve-social", "approval.md", "human-approval"),
     Stage("write-linkedin", "linkedin-draft.md", "write-linkedin"),
     Stage("write-x", "x-draft.md", "write-x"),
 )
@@ -94,12 +97,20 @@ class RoutedStageExecutor:
         research_resources: StageExecutor | None = None,
         evidence_context: StageExecutor | None = None,
         write_blog: StageExecutor | None = None,
+        review_blog: StageExecutor | None = None,
+        approve_social: StageExecutor | None = None,
+        write_linkedin: StageExecutor | None = None,
+        write_x: StageExecutor | None = None,
         fallback: StageExecutor | None = None,
     ) -> None:
         self.research_work = research_work
         self.research_resources = research_resources
         self.evidence_context = evidence_context
         self.write_blog = write_blog
+        self.review_blog = review_blog
+        self.approve_social = approve_social
+        self.write_linkedin = write_linkedin
+        self.write_x = write_x
         self.fallback = fallback or PlaceholderStageExecutor()
 
     def execute(self, *, stage: Stage, subject: str, run_dir: Path) -> StageResult:
@@ -111,6 +122,14 @@ class RoutedStageExecutor:
             return self.evidence_context.execute(stage=stage, subject=subject, run_dir=run_dir)
         if stage.name == "write-blog" and self.write_blog:
             return self.write_blog.execute(stage=stage, subject=subject, run_dir=run_dir)
+        if stage.name == "review-blog" and self.review_blog:
+            return self.review_blog.execute(stage=stage, subject=subject, run_dir=run_dir)
+        if stage.name == "approve-social" and self.approve_social:
+            return self.approve_social.execute(stage=stage, subject=subject, run_dir=run_dir)
+        if stage.name == "write-linkedin" and self.write_linkedin:
+            return self.write_linkedin.execute(stage=stage, subject=subject, run_dir=run_dir)
+        if stage.name == "write-x" and self.write_x:
+            return self.write_x.execute(stage=stage, subject=subject, run_dir=run_dir)
         return self.fallback.execute(stage=stage, subject=subject, run_dir=run_dir)
 
 

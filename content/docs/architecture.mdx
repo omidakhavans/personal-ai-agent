@@ -17,7 +17,7 @@ The runtime coordinates stage order and persistence. The model interprets bounde
 CLI -> Orchestrator -> state.json -> stage executor -> Markdown artifacts
 ```
 
-The orchestrator owns deterministic rules, such as `review-blog` happening after `write-blog`. Stage executors own capability-specific logic, such as deciding that insufficient evidence should block a run.
+The orchestrator owns deterministic rules, such as `review-blog` happening after `write-blog` and human approval happening before social drafting. Stage executors own capability-specific logic, such as deciding that insufficient evidence should block a run.
 
 ## Grounding boundary
 
@@ -33,6 +33,12 @@ repository or supplied resource
 ```
 
 This does not prove that every model interpretation is correct. It makes important claims traceable and gives a human reviewer a clear evidence trail.
+
+## Review and approval boundary
+
+`review-blog` fingerprints the exact saved article, compares it with the prepared evidence context, and blocks material grounding or technical problems. A passing review is still only `ready_for_human_review`.
+
+The next `approve-social` stage pauses the run until its owner explicitly approves social transformation. LinkedIn and X stages require that approval and the matching review fingerprint, then write drafts only. No stage publishes content.
 
 ## Safety boundary
 

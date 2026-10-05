@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .stages import (
+    STAGE_AWAITING_APPROVAL,
     STAGE_BLOCKED,
     STAGE_COMPLETED,
     STAGE_FAILED,
@@ -22,6 +23,7 @@ from .state import (
     RUN_COMPLETED,
     RUN_FAILED,
     RUN_RUNNING,
+    RUN_AWAITING_APPROVAL,
     initial_state,
     new_run_id,
     paths_for_run,
@@ -74,7 +76,7 @@ class Orchestrator:
             with run_lock(paths.run_dir):
                 state = read_state(paths.state_path)
 
-                if state["status"] in {RUN_COMPLETED, RUN_BLOCKED, RUN_FAILED}:
+                if state["status"] in {RUN_COMPLETED, RUN_BLOCKED, RUN_FAILED, RUN_AWAITING_APPROVAL}:
                     return state
 
                 self._verify_prior_artifacts(state, paths.run_dir)
@@ -91,6 +93,41 @@ class Orchestrator:
                 stage_state["message"] = "Interrupted attempt will be retried on explicit resume."
                 stage_state["finished_at"] = None
                 return
+
+    def approve_social(self, run_id: str, notes: str | None = None) -> dict[str, Any]:
+        """Record an explicit owner decision, then continue the social-draft stages."""
+        try:
+            paths = paths_for_run(self.runs_dir, run_id)
+            with run_lock(paths.run_dir):
+                state = read_state(paths.state_path)
+                stage_name = "approve-social"
+                stage_state = state["stages"][stage_name]
+                if state["status"] != RUN_AWAITING_APPROVAL or stage_state["status"] != STAGE_AWAITING_APPROVAL:
+                    raise RuntimeErrorWithContext("This run is not awaiting social-transformation approval.")
+                from .approval import render_approved_social_transformations
+                from .content_artifacts import ArtifactInputError, collect_reviewed_article_inputs
+
+                try:
+                    article = collect_reviewed_article_inputs(paths.run_dir).article
+                except ArtifactInputError as exc:
+                    raise RuntimeErrorWithContext(
+                        f"Social approval cannot use the current artifacts: {exc}"
+                    ) from exc
+
+                (paths.run_dir / "approval.md").write_text(
+                    render_approved_social_transformations(
+                        state["subject"], notes, article.blog_sha256
+                    ),
+                    encoding="utf-8",
+                )
+                stage_state["status"] = STAGE_COMPLETED
+                stage_state["message"] = "Social transformation approved explicitly by the run owner."
+                stage_state["finished_at"] = utc_now()
+                state["status"] = RUN_RUNNING
+                write_state(paths.state_path, state)
+                return self._advance(state=state, state_path=paths.state_path, run_dir=paths.run_dir)
+        except StateError as exc:
+            raise RuntimeErrorWithContext(str(exc)) from exc
 
     def _advance(
         self,
@@ -175,6 +212,10 @@ class Orchestrator:
 
             if result.status == STAGE_BLOCKED:
                 state["status"] = RUN_BLOCKED
+                write_state(state_path, state)
+                return state
+            if result.status == STAGE_AWAITING_APPROVAL:
+                state["status"] = RUN_AWAITING_APPROVAL
                 write_state(state_path, state)
                 return state
             if result.status == STAGE_FAILED:

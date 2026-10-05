@@ -12,15 +12,16 @@ The repository is a small Python runtime that makes the mechanics behind an AI w
 - grounded repository and resource research;
 - evidence reduction before later generation;
 - explicit `completed`, `blocked`, and `failed` outcomes;
-- human review before publishing.
+- evidence-aware review and explicit human approval before social drafting.
 
 The current real stages are:
 
 ```text
 research-work -> research-resources -> build-evidence-context -> write-blog
+  -> review-blog -> approve-social -> write-linkedin -> write-x
 ```
 
-The review and social stages remain placeholders. That is intentional: the learning focus is currently on grounding, context engineering, grounded generation, and runtime reliability rather than publishing automatically.
+The full draft-first workflow is implemented. It still never publishes automatically.
 
 ## Read in order
 

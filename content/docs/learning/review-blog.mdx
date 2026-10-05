@@ -1,0 +1,16 @@
+---
+title: Review Blog
+description: Evaluate a grounded draft against its evidence before it can be transformed.
+---
+
+## Purpose
+
+`review-blog` reads the saved blog draft and evidence context, then writes `blog-review.md`. It does not rewrite the article, research new sources, publish, or create social content.
+
+## Evidence-aware evaluation
+
+The review records a SHA-256 fingerprint of the exact blog bytes it inspected. Every finding includes severity, category, an exact article excerpt, evidence IDs when support exists, and a recommended change. Later stages reject a review that no longer matches the current article.
+
+`Critical` findings and material factual or technical `Important` findings produce `needs_revision` and block the pipeline. A passing result is only `ready_for_human_review`.
+
+Generation and evaluation are separate responsibilities. An evaluator using evidence can reduce risk, but an LLM review is not proof that content is correct. Human review remains required.

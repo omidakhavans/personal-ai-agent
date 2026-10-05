@@ -34,7 +34,7 @@ validation, and a `blocked` outcome when continuing would be misleading.
 
 ## 2. What Exists Today
 
-The workflow has seven named stages, but only the first four are real:
+The workflow has eight named stages, all implemented:
 
 ```text
 subject
@@ -42,9 +42,10 @@ subject
   -> research-resources            real
   -> build-evidence-context        real
   -> write-blog                    real
-  -> review-blog                   placeholder
-  -> write-linkedin                placeholder
-  -> write-x                       placeholder
+  -> review-blog                   real
+  -> approve-social                human checkpoint
+  -> write-linkedin                real
+  -> write-x                       real
 ```
 
 The full stage order lives in `personal_ai_agent/stages.py` as
@@ -216,6 +217,7 @@ These status values are central to the runtime.
 | `skipped` | The stage was optional and had no input. | No resources were supplied. |
 | `blocked` | Continuing would be unsafe or unsupported. | No repository evidence exists for the subject. |
 | `failed` | A technical or contract error occurred. | A model returned invalid JSON or cited an unknown ID. |
+| `awaiting_approval` | Automation is paused for an owner decision. | A review passed before social drafting. |
 
 `blocked` is an agent behavior, not an exception. It means “stop and ask for
 better evidence or human judgment.” `failed` means “the system needs a technical
@@ -245,7 +247,7 @@ quality, writing usefulness, and prompt behavior.
 `write-blog` reads only `context-brief.md`. It does not restart research or
 browse the repository.
 
-Its job will be grounded generation:
+Its job is grounded generation:
 
 ```text
 context-brief.md
@@ -271,9 +273,9 @@ becomes the next quality gate before LinkedIn and X transformations.
    returns `recommended_article_focus.status = "insufficient_evidence"`.
 4. Add a maximum total context-size limit across both research reports and make
    the failure message explain which artifact is too large.
-5. Implement `review-blog` using the same pattern: bounded artifact input,
-   structured model output, validation, Markdown rendering, tests, and a stage
-   walkthrough.
+5. Change `review-blog` so an Important editorial finding also requires
+   `needs_revision`, then decide whether that stricter policy is appropriate
+   and update its regression tests.
 
 These exercises are useful because they force you to work at the places where
 agent systems become dependable: inputs, state, evidence, decision gates,

@@ -17,7 +17,15 @@ this repository. Read it in this order.
    - Learn how the runtime reduces research into a compact writer-ready brief.
 6. [Write Blog Stage](stage-write-blog.md)
    - Learn how structured, cited generation turns the brief into a draft for review.
-7. [Runtime Hardening](runtime-hardening.md)
+7. [Review Blog Stage](stage-review-blog.md)
+   - Learn how an evaluator checks the draft against its evidence before it can travel further.
+8. [Social Approval Stage](stage-approve-social.md)
+   - Learn how a human decision becomes durable workflow state.
+9. [Write LinkedIn Stage](stage-write-linkedin.md)
+   - Learn how a reviewed article is adapted without recreating the story.
+10. [Write X Stage](stage-write-x.md)
+   - Learn how concise, controlled generation chooses a post or thread.
+11. [Runtime Hardening](runtime-hardening.md)
    - Learn why safety, artifact verification, durable state, and retries belong
      in the runtime rather than in individual AI prompts.
 
@@ -36,15 +44,15 @@ credentials, and other local data.
 
 ## Current Boundary
 
-The current runtime has four real stages:
+The current runtime has eight real stages:
 
 ```text
 research-work -> research-resources -> build-evidence-context -> write-blog
+  -> review-blog -> approve-social -> write-linkedin -> write-x
 ```
 
-The later review and social stages are intentionally still placeholders. This
-lets you learn evidence-grounded generation before adding evaluation and
-platform-specific transformation.
+The run pauses at `approve-social` after a passing review. The owner must run
+the explicit approval command before the two social drafts are generated.
 
 ## Run The Tests
 

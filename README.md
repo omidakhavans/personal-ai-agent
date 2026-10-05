@@ -6,12 +6,12 @@ This repository starts rebuilding the Phase 1 Content Agent outside Codex. Phase
 
 ## Current Status
 
-Phase 2 now has real, LLM-powered `research-work`, `research-resources`,
-`build-evidence-context`, and `write-blog` stages. Review and social stages are
-still placeholders.
+Phase 2 now has real, LLM-powered research, evidence-context, blog-writing,
+review, LinkedIn, and X stages. Social transformations require a recorded human
+approval after the evidence-aware blog review passes.
 
 The runtime lifecycle was validated first with placeholder stages. It now has
-four real stages while the remaining stages still use placeholders:
+eight real stages, including an explicit human approval pause:
 
 - run creation
 - run directories
@@ -64,6 +64,11 @@ traceable evidence references, and writes `blog-draft.md`. Every generated
 paragraph and takeaway must cite known work or resource evidence. The artifact
 is explicitly `draft_for_human_review`; it is never published by this runtime.
 
+`review-blog` fingerprints the exact saved blog draft, compares it with the
+evidence context, and blocks material grounding or technical issues. A passing
+review pauses at `approve-social`; only an explicit owner decision allows
+`write-linkedin` and `write-x` to produce draft-only social artifacts.
+
 ## Workflow
 
 ```text
@@ -74,6 +79,7 @@ subject
   -> build-evidence-context
   -> write-blog
   -> review-blog
+  -> approve-social
   -> write-linkedin
   -> write-x
 ```
@@ -96,6 +102,13 @@ Resume an incomplete run:
 
 ```bash
 python -m personal_ai_agent resume <run-id>
+```
+
+Approve social drafting after reviewing a passing blog review:
+
+```bash
+python -m personal_ai_agent approve-social <run-id> \
+  --notes "Reviewed the source boundaries."
 ```
 
 Show persisted state:

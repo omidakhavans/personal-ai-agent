@@ -1,0 +1,19 @@
+---
+title: Approve Social Drafting
+description: Record an explicit human decision before creating derivative social drafts.
+---
+
+## Purpose
+
+After a blog review passes, `approve-social` writes `approval.md` and places the run in `awaiting_approval`. It is an intentional pause, not a model decision.
+
+## Continue deliberately
+
+```bash
+python -m personal_ai_agent approve-social <run-id> \
+  --notes "Reviewed the source boundaries."
+```
+
+The command records the owner decision and the exact reviewed blog fingerprint, then allows the two social-writing stages to create drafts. It does not publish anything.
+
+This makes human judgment visible in workflow state. `blocked` means the run needs correction or better input; `awaiting_approval` means automation is ready but a person still needs to decide.

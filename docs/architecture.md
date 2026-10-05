@@ -28,9 +28,9 @@ Agent = Runtime + Model + Tools + Instructions + State
 
 The runtime coordinates execution and persistence. The model provides reasoning and language generation. Tools provide external actions. Instructions define behavior. State records what has happened.
 
-Step 1 implemented the runtime skeleton. Phase 2 now has four real
-capabilities: grounded repository research, grounded supplied-resource research,
-evidence-context construction, and grounded blog drafting.
+Phase 2 now has the complete draft-first workflow: grounded repository and
+resource research, evidence-context construction, blog drafting, evaluation,
+human approval, and platform-specific social transformation.
 
 ## Runtime Shape
 
@@ -52,6 +52,8 @@ Some orchestration rules are deterministic:
 
 ```text
 write-blog must happen before review-blog
+review-blog must pass before human approval
+human approval must happen before social transformation
 ```
 
 That does not require model reasoning. It is just workflow order.
@@ -153,6 +155,28 @@ the runtime validates before rendering Markdown. This constrains generation to
 prepared evidence while leaving the model room to choose useful structure and
 language. It does not replace human editorial or technical review.
 
+## Evaluation And Approval
+
+`review-blog` compares `blog-draft.md` with `context-brief.md` and writes a
+fingerprinted `blog-review.md`. Findings quote the saved article and cite known
+evidence IDs when support exists. Material grounding or technical findings block
+the run with `needs_revision`; a passing review remains only
+`ready_for_human_review`.
+
+The next stage is deliberately not another model call. `approve-social` writes
+an approval request and puts the run in `awaiting_approval`. The owner must run
+the explicit approval command before downstream draft generation. This makes a
+human judgment a visible state transition rather than an assumption hidden in a
+prompt.
+
+## Controlled Social Transformation
+
+The LinkedIn and X writers receive the reviewed blog, its matching review, and
+the approval record. They do not receive repository access or raw research.
+Both return structured, evidence-cited output; X additionally validates its
+single-post or thread shape and 280-character maximum per post. Neither stage
+publishes or calls a social API.
+
 ## Evidence Context
 
 `build-evidence-context` is the boundary between research and generation:
@@ -183,6 +207,7 @@ Resume behavior means:
 - completed stages do not run again
 - skipped stages remain skipped
 - failed or blocked runs stay stopped
+- approval-paused runs wait for an explicit owner decision
 - interrupted `running` stages can be retried
 
 The runtime also verifies previously completed artifacts before resuming. A

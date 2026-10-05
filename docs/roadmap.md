@@ -22,7 +22,7 @@ Status: Complete.
 
 Implemented:
 
-- CLI entrypoint with `run`, `resume`, and `show-state`.
+- CLI entrypoint with `run`, `resume`, `approve-social`, and `show-state`.
 - Unique run ids.
 - Run directories under `runs/<run-id>/`.
 - Machine-readable `state.json`.
@@ -30,11 +30,11 @@ Implemented:
 - Placeholder stage executor.
 - Markdown artifacts for each stage.
 - State persistence after every transition.
-- Distinction between `failed` and `blocked`.
+- Distinction between `failed`, `blocked`, and `awaiting_approval`.
 - Resume behavior that avoids rerunning completed stages.
 - Tests for creation, state initialization, stage progression, artifacts, persistence, failed behavior, blocked behavior, resume behavior, and completed-stage reuse.
 
-Current placeholder workflow:
+Current implemented workflow:
 
 ```text
 subject
@@ -43,6 +43,7 @@ subject
   -> build-evidence-context
   -> write-blog
   -> review-blog
+  -> approve-social
   -> write-linkedin
   -> write-x
 ```
@@ -130,31 +131,52 @@ The current Phase 2 learning sequence lives in `docs/learning/README.md`.
 It starts with the end-to-end build guide, then moves into the runtime and stage
 walkthroughs. Keep a new stage walkthrough beside every future real capability.
 
+## Step 6: `review-blog`
+
+Status: Complete.
+
+Implemented:
+
+- Bounded blog and context inputs with a SHA-256 identity for the reviewed draft.
+- Structured factual, technical, and editorial findings with exact article
+  excerpts and traceable evidence IDs.
+- A deterministic `needs_revision` gate for Critical and material Important
+  factual or technical findings.
+- A visible `blog-review.md`; review never silently rewrites the article.
+
+This is an evaluator pattern. A review can improve reliability, but it is not
+proof of correctness; human review remains necessary.
+
+## Step 7: Social Approval And Transformation
+
+Status: Complete.
+
+Implemented:
+
+- An `approve-social` state that pauses after a passing blog review.
+- An explicit CLI approval command that records the owner's decision before
+  continuing.
+- LinkedIn and X transformations that require an approved, fingerprint-matched
+  reviewed blog.
+- Structured social outputs with evidence IDs; X validates a single post or a
+  two-to-five-post thread with a 280-character limit per post.
+- Draft-only artifacts; no publishing, scheduling, or social APIs.
+
+This completes the core Phase 2 draft-first pipeline.
+
 ## Recommended Next Phase 2 Task
 
-Add an evidence-aware `review-blog` capability.
+Add a controlled `edit-blog` revision loop.
 
 Why this should come next:
 
-- `write-blog` now produces a grounded, cited canonical draft.
-- The next risk is not generating more channels; it is accepting a persuasive
-  but misleading interpretation before downstream transformation.
-- Review can compare the draft with the same context brief and surface factual,
-  technical, and editorial issues for a human to decide.
+- `review-blog` can now correctly stop on `needs_revision`.
+- The practical follow-up is helping an owner revise the canonical draft while
+  preserving the review's evidence boundaries and then re-running review.
+- That creates a complete human-in-the-loop correction loop before introducing
+  publishing or automation.
 
-Suggested scope:
-
-```text
-review-blog executor
-  -> read blog-draft.md and context-brief.md
-  -> identify unsupported, exaggerated, or unclear claims
-  -> preserve material findings and evidence references
-  -> call a raw LLM API with bounded context
-  -> write blog-review.md
-  -> return completed or blocked
-```
-
-Do not implement this until explicitly requested.
+Do not implement it until explicitly requested.
 
 ## Runtime Hardening
 
@@ -175,16 +197,13 @@ Implemented:
 - Public-HTTPS-only resource fetching with private-network and redirect checks.
 - Bounded model output plus bounded retry behavior for transient API failures.
 
-The runtime foundations now support grounded generation without duplicating
-safety policy in every stage. The next capability is evidence-aware review,
-which should keep the same traceability boundary before social transformation.
+The runtime foundations now support grounded generation, evidence-aware review,
+and social transformation without duplicating safety policy in every stage.
 
 ## Later Ideas
 
 - Add a simple workflow configuration file.
-- Add evidence-aware review.
-- Add social transformation.
-- Add human approval checkpoints.
+- Add controlled blog revision and re-review.
 - Add a small tool abstraction only when repeated tool behavior appears.
 
 Avoid LangChain, LangGraph, CrewAI, AutoGen, workflow frameworks, vector databases, RAG, embeddings, queues, publishing APIs, and social APIs until there is a clear need.

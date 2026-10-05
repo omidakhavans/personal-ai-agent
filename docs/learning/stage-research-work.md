@@ -39,8 +39,8 @@ ResearchWorkSettings
 
 `RoutedStageExecutor.execute()` in `personal_ai_agent/stages.py` directs the
 `research-work` stage to `ResearchWorkExecutor.execute()` in
-`personal_ai_agent/research_work.py`. Other stages still go to the placeholder
-executor.
+`personal_ai_agent/research_work.py`. The same routing boundary now directs
+every later capability to its own executor.
 
 `ResearchWorkExecutor.execute()` performs this sequence:
 
