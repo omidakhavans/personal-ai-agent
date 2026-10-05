@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import ipaddress
 import socket
+from typing import Any
 from urllib.parse import urlparse
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 
 class UnsafeResourceURL(ValueError):
@@ -41,12 +42,24 @@ def validate_public_https_url(url: str) -> None:
 class _PublicRedirectHandler(HTTPRedirectHandler):
     max_redirections = 3
 
-    def redirect_request(self, request, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+    def redirect_request(
+        self,
+        request: Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> Request | None:
+        # Redirect targets are new, untrusted network destinations. Validate
+        # each before urllib has an opportunity to request it.
         validate_public_https_url(newurl)
         return super().redirect_request(request, fp, code, msg, headers, newurl)
 
 
-def open_public_https(request: Request, *, timeout: int):
+def open_public_https(request: Request, *, timeout: int) -> Any:
     """Open a validated request and revalidate every redirect destination."""
     validate_public_https_url(request.full_url)
-    return build_opener(_PublicRedirectHandler()).open(request, timeout=timeout)
+    # Do not inherit proxy settings from the machine. A configured local proxy
+    # would otherwise undermine this public-network-only fetch boundary.
+    return build_opener(ProxyHandler({}), _PublicRedirectHandler()).open(request, timeout=timeout)

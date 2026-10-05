@@ -28,6 +28,9 @@ this repository. Read it in this order.
 11. [Runtime Hardening](runtime-hardening.md)
    - Learn why safety, artifact verification, durable state, and retries belong
      in the runtime rather than in individual AI prompts.
+12. [Code Quality And Static Analysis](code-quality.md)
+   - Learn what linting, type checking, tests, grounding, and human review each
+     prove, and where their guarantees stop.
 
 The recommended way to learn is to read one guide, open the named files beside
 it, then run the focused tests. Change one small behavior only after you can

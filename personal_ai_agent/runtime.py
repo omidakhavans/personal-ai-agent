@@ -19,17 +19,17 @@ from .stages import (
     StageExecutor,
 )
 from .state import (
+    RUN_AWAITING_APPROVAL,
     RUN_BLOCKED,
     RUN_COMPLETED,
     RUN_FAILED,
     RUN_RUNNING,
-    RUN_AWAITING_APPROVAL,
+    StateError,
     initial_state,
     new_run_id,
     paths_for_run,
     read_state,
     run_lock,
-    StateError,
     utc_now,
     write_private_config,
     write_state,
@@ -85,6 +85,22 @@ class Orchestrator:
         except StateError as exc:
             raise RuntimeErrorWithContext(str(exc)) from exc
 
+    def validate_run(self, run_id: str) -> dict[str, Any]:
+        """Check persisted state and the artifacts it claims are available.
+
+        This is intentionally read-only. It gives an operator or CI job a way
+        to detect a moved, deleted, or tampered artifact without resuming a
+        model-backed workflow or spending tokens.
+        """
+        try:
+            paths = paths_for_run(self.runs_dir, run_id)
+            with run_lock(paths.run_dir):
+                state = read_state(paths.state_path)
+                self._verify_prior_artifacts(state, paths.run_dir)
+                return state
+        except StateError as exc:
+            raise RuntimeErrorWithContext(str(exc)) from exc
+
     def _reset_interrupted_stage(self, state: dict[str, Any]) -> None:
         for stage in WORKFLOW_STAGES:
             stage_state = state["stages"][stage.name]
@@ -105,7 +121,10 @@ class Orchestrator:
                 if state["status"] != RUN_AWAITING_APPROVAL or stage_state["status"] != STAGE_AWAITING_APPROVAL:
                     raise RuntimeErrorWithContext("This run is not awaiting social-transformation approval.")
                 from .approval import render_approved_social_transformations
-                from .content_artifacts import ArtifactInputError, collect_reviewed_article_inputs
+                from .content_artifacts import (
+                    ArtifactInputError,
+                    collect_reviewed_article_inputs,
+                )
 
                 try:
                     article = collect_reviewed_article_inputs(paths.run_dir).article
@@ -251,7 +270,12 @@ class Orchestrator:
     def _verify_prior_artifacts(self, state: dict[str, Any], run_dir: Path) -> None:
         for stage in WORKFLOW_STAGES:
             stage_state = state["stages"][stage.name]
-            if stage_state["status"] in {STAGE_COMPLETED, STAGE_SKIPPED, STAGE_BLOCKED}:
+            if stage_state["status"] in {
+                STAGE_COMPLETED,
+                STAGE_SKIPPED,
+                STAGE_BLOCKED,
+                STAGE_AWAITING_APPROVAL,
+            }:
                 error = self._validate_stage_artifact(
                     status=stage_state["status"],
                     artifact=stage_state["artifact"],

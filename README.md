@@ -54,6 +54,11 @@ expected non-empty artifact in the run directory before the runtime records it
 as successful. Resuming an interrupted stage creates a new recorded attempt,
 which can result in another model call and should be intentional.
 
+The runtime also has a read-only `validate` command. It checks that persisted
+state is structurally valid and that every stage the state says is available
+still has its expected artifact. It makes no model request and does not advance
+the workflow.
+
 `build-evidence-context` reads the two research artifacts from the same run,
 selects only the strongest traceable claims, and writes `context-brief.md`. It
 keeps unknowns, unsupported claims, and missing-resource limitations visible to
@@ -117,6 +122,12 @@ Show persisted state:
 python -m personal_ai_agent show-state <run-id>
 ```
 
+Validate the state and artifacts without advancing the run:
+
+```bash
+python -m personal_ai_agent validate <run-id>
+```
+
 Use a custom runs directory:
 
 ```bash
@@ -128,15 +139,29 @@ Pass `--model <name>` to select a model for a new run. The repository and model
 are represented with safe labels in run state. Their actual local locations are
 kept only in the git-ignored local resume configuration so `resume` can recreate
 the stage configuration. Repeat `--resource` to override the saved resource
-list during resume.
+list during resume. For automation, place `--output-format json` before the
+subcommand. `--request-timeout-seconds`, `--max-model-attempts`, and
+`--max-output-tokens` make model-call limits explicit; their values are retained
+in the local resume configuration. See [the CLI reference](docs/cli-reference.md)
+for the full contract.
 
-## Tests
+## Quality Checks
 
-Run tests with the standard library:
+Install the development tools once, then run the same checks used in GitHub
+Actions:
 
 ```bash
+python -m pip install -e ".[dev]"
+python -m ruff check personal_ai_agent tests
+python -m mypy
 python -m unittest discover -s tests
 ```
+
+`ruff` catches common Python mistakes and import drift, `mypy` checks the typed
+interfaces between runtime components, and tests verify runtime behavior. They
+do not prove that a model-generated claim is true; evidence validation and human
+review remain separate controls. Read [Code Quality](docs/learning/code-quality.md)
+for the reasoning behind this boundary.
 
 ## Learn The Runtime
 

@@ -195,7 +195,15 @@ Implemented:
   paths; private resume locations live in ignored owner-only local config.
 - Best-effort credential redaction before collected source text reaches a model.
 - Public-HTTPS-only resource fetching with private-network and redirect checks.
+- Disabled ambient proxy inheritance for resource requests so local proxy
+  configuration cannot silently bypass the public-network boundary.
 - Bounded model output plus bounded retry behavior for transient API failures.
+- Validated positive CLI controls for timeout, retry count, output cap, and
+  machine-readable run summaries; limits persist with local resume settings.
+- Read-only `validate` command that checks saved state and expected artifacts
+  without calling a model or advancing a run.
+- Ruff linting, mypy type checks, behavioral tests, and documentation builds in
+  the pull-request and `main` quality workflow.
 
 The runtime foundations now support grounded generation, evidence-aware review,
 and social transformation without duplicating safety policy in every stage.

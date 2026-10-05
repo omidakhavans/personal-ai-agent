@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .content_artifacts import ArtifactInputError, ArticleInputs, collect_article_inputs
+from .content_artifacts import ArticleInputs, ArtifactInputError, collect_article_inputs
 from .model_client import ModelClient
 from .privacy import redact_sensitive_text
 from .stages import STAGE_BLOCKED, STAGE_COMPLETED, Stage, StageResult

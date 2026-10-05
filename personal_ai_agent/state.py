@@ -6,24 +6,49 @@ import json
 import os
 import re
 import tempfile
-from copy import deepcopy
 from contextlib import contextmanager
+from copy import deepcopy
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, TypeAlias, cast
 from uuid import uuid4
 
-from .stages import STAGE_PENDING, STAGE_SKIPPED, WORKFLOW_STAGES
+from .stages import STAGE_PENDING, STAGE_SKIPPED, WORKFLOW_STAGES, StageStatus
 
-RUN_PENDING = "pending"
-RUN_RUNNING = "running"
-RUN_COMPLETED = "completed"
-RUN_BLOCKED = "blocked"
-RUN_FAILED = "failed"
-RUN_AWAITING_APPROVAL = "awaiting_approval"
+RunStatus: TypeAlias = Literal[
+    "pending", "running", "completed", "blocked", "failed", "awaiting_approval"
+]
+
+RUN_PENDING: RunStatus = "pending"
+RUN_RUNNING: RunStatus = "running"
+RUN_COMPLETED: RunStatus = "completed"
+RUN_BLOCKED: RunStatus = "blocked"
+RUN_FAILED: RunStatus = "failed"
+RUN_AWAITING_APPROVAL: RunStatus = "awaiting_approval"
 STATE_VERSION = 3
 RUN_ID_PATTERN = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{8}$")
+RUN_STATUSES: frozenset[RunStatus] = frozenset(
+    {
+        RUN_PENDING,
+        RUN_RUNNING,
+        RUN_COMPLETED,
+        RUN_BLOCKED,
+        RUN_FAILED,
+        RUN_AWAITING_APPROVAL,
+    }
+)
+STAGE_STATUSES: frozenset[StageStatus] = frozenset(
+    {
+        "pending",
+        "running",
+        "completed",
+        "skipped",
+        "blocked",
+        "failed",
+        "awaiting_approval",
+    }
+)
 
 
 class StateError(RuntimeError):
@@ -31,11 +56,11 @@ class StateError(RuntimeError):
 
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def new_run_id() -> str:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     return f"{stamp}-{uuid4().hex[:8]}"
 
 
@@ -67,6 +92,8 @@ def initial_state(
     subject: str,
     inputs: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if not subject.strip():
+        raise StateError("Run subject must not be empty.")
     return {
         "state_version": STATE_VERSION,
         "run_id": run_id,
@@ -99,12 +126,13 @@ def read_state(state_path: Path) -> dict[str, Any]:
         raise StateError("Run state is unreadable or corrupt.") from exc
     state = _migrate_state(state)
     _validate_state(state)
-    return state
+    return cast(dict[str, Any], state)
 
 
 def write_state(state_path: Path, state: dict[str, Any]) -> None:
     state = deepcopy(state)
     state["updated_at"] = utc_now()
+    _validate_state(state)
     _write_json_atomically(state_path, state)
 
 
@@ -113,6 +141,7 @@ def write_private_config(runs_dir: Path, run_id: str, config: dict[str, Any]) ->
     path = private_config_path(runs_dir, run_id)
     _validate_private_config(config)
     _write_json_atomically(path, config)
+    os.chmod(path.parent, 0o700)
     os.chmod(path, 0o600)
 
 
@@ -180,27 +209,57 @@ def run_lock(run_dir: Path):
 def _validate_state(state: Any) -> None:
     if not isinstance(state, dict):
         raise StateError("Run state has an invalid format.")
-    required = {"state_version", "run_id", "subject", "inputs", "status", "current_stage", "stages"}
+    required = {
+        "state_version",
+        "run_id",
+        "subject",
+        "inputs",
+        "status",
+        "current_stage",
+        "created_at",
+        "updated_at",
+        "stages",
+    }
     if not required.issubset(state):
         raise StateError("Run state is missing required fields.")
     if state["state_version"] != STATE_VERSION:
         raise StateError("Run state version is unsupported.")
     if not isinstance(state["run_id"], str) or not RUN_ID_PATTERN.fullmatch(state["run_id"]):
         raise StateError("Run state contains an invalid run id.")
-    if not isinstance(state["subject"], str) or not isinstance(state["inputs"], dict):
+    if not isinstance(state["subject"], str) or not state["subject"].strip():
         raise StateError("Run state has invalid inputs.")
-    if state["status"] not in {RUN_PENDING, RUN_RUNNING, RUN_COMPLETED, RUN_BLOCKED, RUN_FAILED, RUN_AWAITING_APPROVAL}:
+    if not isinstance(state["inputs"], dict):
+        raise StateError("Run state has invalid inputs.")
+    if state["status"] not in RUN_STATUSES:
         raise StateError("Run state has an invalid run status.")
+    stage_names = {stage.name for stage in WORKFLOW_STAGES}
+    if state["current_stage"] is not None and state["current_stage"] not in stage_names:
+        raise StateError("Run state has an invalid current stage.")
+    if not all(isinstance(state[key], str) for key in ("created_at", "updated_at")):
+        raise StateError("Run state has invalid timestamps.")
     if not isinstance(state["stages"], dict):
         raise StateError("Run state has invalid stage data.")
+    if set(state["stages"]) != stage_names:
+        raise StateError("Run state has an unexpected stage set.")
     for stage in WORKFLOW_STAGES:
         stage_state = state["stages"].get(stage.name)
-        if not isinstance(stage_state, dict) or stage_state.get("status") not in {
-            "pending", "running", "completed", "skipped", "blocked", "failed", "awaiting_approval",
-        }:
+        expected = {"status", "artifact", "message", "attempts", "started_at", "finished_at"}
+        if not isinstance(stage_state, dict) or set(stage_state) != expected:
             raise StateError(f"Run state has invalid data for stage {stage.name!r}.")
-        if not isinstance(stage_state.get("attempts"), int) or stage_state["attempts"] < 0:
+        if stage_state["status"] not in STAGE_STATUSES:
+            raise StateError(f"Run state has invalid data for stage {stage.name!r}.")
+        if stage_state["artifact"] != stage.artifact or not isinstance(stage_state["message"], str):
+            raise StateError(f"Run state has invalid artifact data for stage {stage.name!r}.")
+        if (
+            not isinstance(stage_state["attempts"], int)
+            or isinstance(stage_state["attempts"], bool)
+            or stage_state["attempts"] < 0
+        ):
             raise StateError(f"Run state has invalid attempt data for stage {stage.name!r}.")
+        if stage_state["started_at"] is not None and not isinstance(stage_state["started_at"], str):
+            raise StateError(f"Run state has invalid start time for stage {stage.name!r}.")
+        if stage_state["finished_at"] is not None and not isinstance(stage_state["finished_at"], str):
+            raise StateError(f"Run state has invalid finish time for stage {stage.name!r}.")
 
 
 def _validate_private_config(config: dict[str, Any]) -> None:
@@ -208,6 +267,25 @@ def _validate_private_config(config: dict[str, Any]) -> None:
         raise StateError("Private run configuration is invalid.")
     if not isinstance(config.get("resources"), list) or not all(isinstance(item, str) for item in config["resources"]):
         raise StateError("Private run configuration is invalid.")
+    options = config.get("model_options")
+    if options is not None:
+        if not isinstance(options, dict) or set(options) != {
+            "timeout_seconds",
+            "max_attempts",
+            "max_output_tokens",
+        }:
+            raise StateError("Private model runtime configuration is invalid.")
+        for key in ("timeout_seconds", "max_attempts"):
+            value = options[key]
+            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                raise StateError("Private model runtime configuration is invalid.")
+        output_limit = options["max_output_tokens"]
+        if output_limit is not None and (
+            not isinstance(output_limit, int)
+            or isinstance(output_limit, bool)
+            or output_limit <= 0
+        ):
+            raise StateError("Private model runtime configuration is invalid.")
 
 
 def _migrate_state(state: Any) -> Any:

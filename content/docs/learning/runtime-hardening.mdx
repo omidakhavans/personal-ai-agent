@@ -11,7 +11,7 @@ The first review of the prototype found that correctness alone was not enough. A
 
 ## Resource safety
 
-The public-web fetcher rejects non-HTTPS URLs, internal addresses, and unsafe redirects. Without that check, a supplied URL could make the runtime read an internal service and place its response in a model prompt.
+The public-web fetcher rejects non-HTTPS URLs, internal addresses, and unsafe redirects. It also ignores ambient machine proxy settings, so a local proxy cannot silently alter this boundary. Without those checks, a supplied URL could make the runtime read an internal service and place its response in a model prompt.
 
 ## Durable state and artifacts
 
@@ -20,6 +20,8 @@ State writes are atomic. State has a version and validation. A run lock prevents
 ## Bounded model calls
 
 The raw API client has a timeout, output-token cap, and conservative retry handling. A connection failure is not retried automatically because the provider may have accepted the request before the client lost contact. This is an important AI-specific trade-off: retries can duplicate non-deterministic, paid work.
+
+The CLI exposes validated controls for timeout, retry count, output cap, and machine-readable summaries. A read-only `validate` command checks state and artifacts without invoking a model or changing a run.
 
 ## Exercises
 

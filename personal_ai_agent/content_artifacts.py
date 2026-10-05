@@ -7,7 +7,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-
 MAX_CONTEXT_BRIEF_CHARACTERS = 40_000
 MAX_BLOG_DRAFT_CHARACTERS = 80_000
 MAX_BLOG_REVIEW_CHARACTERS = 80_000

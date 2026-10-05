@@ -35,7 +35,8 @@ Files: `personal_ai_agent/resource_fetch.py` and
 
 The resource tool accepts only explicit public HTTPS URLs. It resolves the host,
 rejects loopback/private/link-local/reserved addresses, and applies the same test
-to redirects. It also caps redirects and bytes read.
+to redirects. It also caps redirects and bytes read, and it ignores ambient
+machine proxy settings so a local proxy cannot silently change this boundary.
 
 Why this is ordinary engineering: a network client needs input validation,
 timeouts, and size limits.
@@ -96,6 +97,12 @@ failure handling.
 Why it matters for agents: an unconstrained model call can exceed a run’s time or
 cost expectations. A retry policy must be conservative because a request may
 have been processed even when the client did not receive the response.
+
+The CLI now exposes positive-number arguments for timeout, maximum attempts,
+and an optional universal output cap. It saves them in local resume configuration
+so a resumed run keeps its original operational limits. `validate <run-id>`
+checks persisted state and expected artifacts without invoking a model or
+advancing the workflow.
 
 ## Exercises
 

@@ -44,4 +44,10 @@ The next `approve-social` stage pauses the run until its owner explicitly approv
 
 Shareable `state.json` and Markdown artifacts use safe labels rather than absolute local paths. Local paths necessary for resume are stored separately in ignored, owner-only local configuration. Source text receives best-effort credential redaction before it reaches the model.
 
-Remote resource fetching accepts only explicitly supplied public HTTPS URLs, rejects private and reserved network addresses, and checks redirect destinations. This prevents a future model or document from turning the runtime into a way to read an internal service.
+Remote resource fetching accepts only explicitly supplied public HTTPS URLs, rejects private and reserved network addresses, checks redirect destinations, and ignores ambient machine proxy settings. This prevents a future model or document from turning the runtime into a way to read an internal service.
+
+## Operations and quality boundaries
+
+The read-only `validate` command checks saved state and expected artifacts without invoking a model or advancing a run. It is useful for handoff and diagnosis.
+
+Ruff, mypy, behavioral tests, and documentation builds catch ordinary software problems before a change is merged. They cannot establish that a model-generated claim is true. Evidence IDs, structured validation, `review-blog`, and explicit human approval remain the separate controls for AI-generated content.

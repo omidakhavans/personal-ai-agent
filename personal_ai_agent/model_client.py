@@ -7,7 +7,7 @@ import os
 import time
 import urllib.error
 import urllib.request
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 
 class ModelClient(Protocol):
@@ -38,6 +38,8 @@ class OpenAIResponsesClient:
         max_output_tokens: int = 1_600,
         max_attempts: int = 3,
     ) -> None:
+        if timeout_seconds <= 0 or max_output_tokens <= 0 or max_attempts <= 0:
+            raise ValueError("Model client limits must be positive.")
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         self.timeout_seconds = timeout_seconds
         self.max_output_tokens = max_output_tokens
@@ -54,9 +56,6 @@ class OpenAIResponsesClient:
     ) -> dict[str, Any]:
         if not self.api_key:
             raise RuntimeError("OPENAI_API_KEY is required to run a real model stage.")
-        if self.timeout_seconds <= 0 or self.max_output_tokens <= 0 or self.max_attempts <= 0:
-            raise RuntimeError("Model client limits must be positive.")
-
         payload = {
             "model": model,
             "max_output_tokens": self.max_output_tokens,
@@ -92,15 +91,21 @@ class OpenAIResponsesClient:
 
         output_text = _response_output_text(response_payload)
         try:
-            return json.loads(output_text)
+            response = json.loads(output_text)
         except json.JSONDecodeError as exc:
             raise RuntimeError("Model response was not valid JSON.") from exc
+        if not isinstance(response, dict):
+            raise RuntimeError("Model response must be a JSON object.")
+        return cast(dict[str, Any], response)
 
     def _send_with_retries(self, request: urllib.request.Request) -> dict[str, Any]:
         for attempt in range(1, self.max_attempts + 1):
             try:
                 with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-                    return json.loads(response.read().decode("utf-8"))
+                    payload = json.loads(response.read().decode("utf-8"))
+                    if not isinstance(payload, dict):
+                        raise RuntimeError("OpenAI API response was not a JSON object.")
+                    return cast(dict[str, Any], payload)
             except urllib.error.HTTPError as exc:
                 retryable = exc.code == 429 or 500 <= exc.code < 600
                 if not retryable or attempt == self.max_attempts:
@@ -114,8 +119,15 @@ class OpenAIResponsesClient:
 
 
 def _response_output_text(payload: dict[str, Any]) -> str:
-    for output in payload.get("output", []):
-        for content in output.get("content", []):
-            if content.get("type") == "output_text":
-                return content["text"]
+    output = payload.get("output")
+    if not isinstance(output, list):
+        raise RuntimeError("OpenAI API response did not contain output text.")
+    for item in output:
+        if not isinstance(item, dict) or not isinstance(item.get("content"), list):
+            continue
+        for content in item["content"]:
+            if isinstance(content, dict) and content.get("type") == "output_text":
+                text = content.get("text")
+                if isinstance(text, str):
+                    return text
     raise RuntimeError("OpenAI API response did not contain output text.")

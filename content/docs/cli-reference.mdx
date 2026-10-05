@@ -1,0 +1,62 @@
+---
+title: CLI Reference
+description: Start, resume, approve, inspect, and validate local agent runs.
+---
+
+The command-line interface is the operator boundary for the local runtime. It creates, resumes, approves, inspects, and validates runs. It never publishes content.
+
+Run `python -m personal_ai_agent --help` for current command help.
+
+## Global options
+
+Place global options before the command.
+
+| Option | Purpose |
+| --- | --- |
+| `--runs-dir <path>` | Stores run directories and machine-local resume configuration. |
+| `--output-format text\|json` | Formats run and validation summaries for people or another program. |
+| `--request-timeout-seconds <positive-int>` | Caps one model request. The default is 60 seconds. |
+| `--max-model-attempts <positive-int>` | Caps attempts for retryable provider responses. The default is 3. |
+| `--max-output-tokens <positive-int>` | Overrides the output limit for every model-backed stage. |
+
+The model limits are retained in ignored local resume configuration, not public artifacts. A resumed run therefore keeps its original operational limits unless you explicitly override them.
+
+## Commands
+
+### Start
+
+```bash
+python -m personal_ai_agent run "What I learned building tool calling" \
+  --repository "/path/to/project" \
+  --resource "/path/to/note.md" \
+  --resource "https://example.com/reference"
+```
+
+`run` requires a non-empty subject, a local repository, and `OPENAI_API_KEY` for real model-backed stages. Repeat `--resource` for explicitly chosen local UTF-8 files or public HTTPS sources. The runtime does not discover sources itself.
+
+### Resume
+
+```bash
+python -m personal_ai_agent resume <run-id>
+```
+
+Completed stages are not rerun. Blocked, failed, and approval-paused runs remain stopped so their reasons stay visible. You can replace saved repository, model, or resources deliberately with command options.
+
+### Validate
+
+```bash
+python -m personal_ai_agent --output-format json validate <run-id>
+```
+
+`validate` is read-only. It checks saved state and every artifact the state says is available. It does not call a model, alter state, or advance a stage. Use it before handoff, archive, or investigation.
+
+### Approve social drafting
+
+```bash
+python -m personal_ai_agent approve-social <run-id> \
+  --notes "I checked the evidence boundaries."
+```
+
+This succeeds only after a passing review and explicit approval pause. It fingerprints the reviewed blog before the LinkedIn and X draft stages run. It does not publish anything.
+
+For the complete local Markdown reference, read [`docs/cli-reference.md`](https://github.com/omidakhavans/personal-ai-agent/blob/main/docs/cli-reference.md).

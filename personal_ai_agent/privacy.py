@@ -6,7 +6,6 @@ import re
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
-
 _REDACTION_PATTERNS = (
     # Common credential formats and high-signal assignment forms. This is a
     # guardrail, not a replacement for deliberate review of selected sources.

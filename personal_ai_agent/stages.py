@@ -1,27 +1,37 @@
-"""Workflow stage definitions and placeholder executors."""
+"""Workflow stage definitions and executor contracts."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Protocol
+from typing import Literal, Protocol, TypeAlias
 
+StageStatus: TypeAlias = Literal[
+    "pending",
+    "running",
+    "completed",
+    "skipped",
+    "blocked",
+    "failed",
+    "awaiting_approval",
+]
 
-STAGE_PENDING = "pending"
-STAGE_RUNNING = "running"
-STAGE_COMPLETED = "completed"
-STAGE_SKIPPED = "skipped"
-STAGE_BLOCKED = "blocked"
-STAGE_FAILED = "failed"
-STAGE_AWAITING_APPROVAL = "awaiting_approval"
+STAGE_PENDING: StageStatus = "pending"
+STAGE_RUNNING: StageStatus = "running"
+STAGE_COMPLETED: StageStatus = "completed"
+STAGE_SKIPPED: StageStatus = "skipped"
+STAGE_BLOCKED: StageStatus = "blocked"
+STAGE_FAILED: StageStatus = "failed"
+STAGE_AWAITING_APPROVAL: StageStatus = "awaiting_approval"
 
-TERMINAL_STAGE_STATUSES = {
+TERMINAL_STAGE_STATUSES: frozenset[StageStatus] = frozenset({
     STAGE_COMPLETED,
     STAGE_SKIPPED,
     STAGE_BLOCKED,
     STAGE_FAILED,
     STAGE_AWAITING_APPROVAL,
-}
+})
 
 
 @dataclass(frozen=True)
@@ -45,7 +55,7 @@ WORKFLOW_STAGES: tuple[Stage, ...] = (
 
 @dataclass(frozen=True)
 class StageResult:
-    status: str
+    status: StageStatus
     message: str
     artifact: str | None = None
 
@@ -56,7 +66,11 @@ class StageExecutor(Protocol):
 
 
 class PlaceholderStageExecutor:
-    """Executor used before real AI capabilities exist."""
+    """Deterministic fallback used by focused runtime tests.
+
+    The production CLI routes every workflow stage to a real executor. Keeping
+    this fallback makes state-machine tests independent from model calls.
+    """
 
     def execute(self, *, stage: Stage, subject: str, run_dir: Path) -> StageResult:
         artifact_path = run_dir / stage.artifact
@@ -88,7 +102,7 @@ class PlaceholderStageExecutor:
 
 
 class RoutedStageExecutor:
-    """Routes implemented stages to their executor and preserves placeholders elsewhere."""
+    """Route each named workflow stage to its dedicated capability."""
 
     def __init__(
         self,

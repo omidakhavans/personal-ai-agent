@@ -1,20 +1,23 @@
 from __future__ import annotations
 
-import copy
 import json
 import os
 import unittest
-from tempfile import TemporaryDirectory
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 from unittest.mock import patch
 
+from personal_ai_agent.approval import SocialApprovalExecutor
+from personal_ai_agent.cli import build_parser, model_options_from_args
+from personal_ai_agent.content_artifacts import collect_article_inputs
 from personal_ai_agent.evidence_context import (
     EvidenceContextExecutor,
     EvidenceContextSettings,
     collect_context_inputs,
     validate_context_brief,
 )
+from personal_ai_agent.model_client import OpenAIResponsesClient
 from personal_ai_agent.research_resources import (
     ResearchResourcesSettings,
     ResourceReadError,
@@ -27,15 +30,11 @@ from personal_ai_agent.research_work import (
     ResearchWorkSettings,
     collect_local_evidence,
 )
-from personal_ai_agent.model_client import OpenAIResponsesClient
-from personal_ai_agent.approval import SocialApprovalExecutor
-from personal_ai_agent.content_artifacts import collect_article_inputs
 from personal_ai_agent.review_blog import (
     BlogReviewerExecutor,
     BlogReviewerSettings,
-    validate_review,
 )
-from personal_ai_agent.runtime import Orchestrator
+from personal_ai_agent.runtime import Orchestrator, RuntimeErrorWithContext
 from personal_ai_agent.social_writing import (
     LinkedInWriterExecutor,
     SocialWriterSettings,
@@ -61,12 +60,11 @@ from personal_ai_agent.state import (
     RUN_FAILED,
     RUN_RUNNING,
     StateError,
+    initial_state,
     paths_for_run,
     private_config_path,
-    initial_state,
-    read_state,
     read_private_config,
-    write_private_config,
+    read_state,
     write_state,
 )
 from personal_ai_agent.write_blog import (
@@ -265,6 +263,63 @@ class RuntimeTests(unittest.TestCase):
             resumed = Orchestrator(runs_dir=runs_dir).resume(first["run_id"])
 
             self.assertEqual(resumed["stages"]["write-blog"]["attempts"], 2)
+
+    def test_validate_run_checks_completed_artifacts_without_advancing_workflow(self) -> None:
+        with TemporaryDirectory() as tmp:
+            runs_dir = Path(tmp) / "runs"
+            state = Orchestrator(runs_dir=runs_dir).start("Validate a completed run")
+            paths = paths_for_run(runs_dir, state["run_id"])
+
+            validated = Orchestrator(runs_dir=runs_dir).validate_run(state["run_id"])
+
+            self.assertEqual(validated["run_id"], state["run_id"])
+            self.assertEqual(validated["status"], RUN_COMPLETED)
+
+            (paths.run_dir / "blog-draft.md").unlink()
+            with self.assertRaisesRegex(RuntimeErrorWithContext, "readable artifact"):
+                Orchestrator(runs_dir=runs_dir).validate_run(state["run_id"])
+
+    def test_invalid_persisted_stage_data_is_rejected(self) -> None:
+        with TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "state.json"
+            state = initial_state("20261002-105024-1234abcd", "Valid subject")
+            state["stages"]["research-work"]["artifact"] = "other.md"
+            state_path.write_text(json.dumps(state), encoding="utf-8")
+
+            with self.assertRaisesRegex(StateError, "artifact data"):
+                read_state(state_path)
+
+    def test_empty_subject_is_rejected_before_state_is_created(self) -> None:
+        with self.assertRaisesRegex(StateError, "subject"):
+            initial_state("20261002-105024-1234abcd", "   ")
+
+    def test_cli_model_limits_are_validated_and_resume_can_reuse_them(self) -> None:
+        parser = build_parser()
+        run_args = parser.parse_args(
+            [
+                "--request-timeout-seconds",
+                "45",
+                "--max-model-attempts",
+                "2",
+                "--max-output-tokens",
+                "1800",
+                "run",
+                "A subject",
+                "--repository",
+                "/path/to/project",
+            ]
+        )
+
+        selected = model_options_from_args(run_args)
+        resume_args = parser.parse_args(["resume", "20261002-105024-1234abcd"])
+        reused = model_options_from_args(
+            resume_args,
+            {
+                "model_options": selected.as_dict(),
+            },
+        )
+
+        self.assertEqual(reused, selected)
 
 
 class FakeModelClient:

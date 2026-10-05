@@ -12,7 +12,6 @@ from .model_client import ModelClient
 from .privacy import redact_sensitive_text, repository_label
 from .stages import STAGE_BLOCKED, STAGE_COMPLETED, Stage, StageResult
 
-
 MAX_MATCHED_FILES = 12
 MAX_EXCERPT_LINES = 18
 MAX_EXCERPT_CHARACTERS = 1_400

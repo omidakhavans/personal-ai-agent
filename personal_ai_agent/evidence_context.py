@@ -11,7 +11,6 @@ from .model_client import ModelClient
 from .privacy import redact_sensitive_text
 from .stages import STAGE_BLOCKED, STAGE_COMPLETED, Stage, StageResult
 
-
 MAX_REPORT_CHARACTERS = 40_000
 CLAIM_LABELS = {
     "Verified work evidence",

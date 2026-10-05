@@ -16,7 +16,6 @@ from .privacy import redact_sensitive_text, reference_label
 from .resource_fetch import UnsafeResourceURL, open_public_https
 from .stages import STAGE_BLOCKED, STAGE_COMPLETED, STAGE_SKIPPED, Stage, StageResult
 
-
 MAX_RESOURCE_BYTES = 512_000
 MAX_RESOURCE_CHARACTERS = 20_000
 VALID_CLAIM_STATUSES = {"Source fact", "Interpretation", "Unknown"}

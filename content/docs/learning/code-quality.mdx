@@ -1,0 +1,66 @@
+---
+title: Code Quality
+description: How static analysis, tests, grounding, and human review work together.
+---
+
+The project checks ordinary runtime code separately from the quality of AI-generated content. Both matter, but they answer different questions.
+
+## Run the checks
+
+From `<project-root>`, install development tools once:
+
+```bash
+python -m pip install -e ".[dev]"
+```
+
+Then run:
+
+```bash
+python -m ruff check personal_ai_agent tests
+python -m mypy
+python -m unittest discover -s tests
+npm run typecheck
+NEXT_PUBLIC_BASE_PATH=/personal-ai-agent npm run build
+```
+
+GitHub Actions runs the same Python and documentation checks on pull requests and updates to `main`. Development-tool versions are pinned in `pyproject.toml`, so analyzer behavior changes only when the project deliberately updates them.
+
+## What each check answers
+
+`ruff` catches common Python mistakes, import drift, and fragile patterns. `mypy` checks the declared interfaces between runtime components, such as a stage executor's result and the model-client boundary. Unit tests exercise the state machine with fake model clients, without API calls or paid work. The TypeScript check and static-site build validate the learning site.
+
+## What they cannot prove
+
+Static analysis cannot prove that a model-generated technical claim is true, that source selection is representative, or that a draft is appropriate to publish. The runtime covers those separate AI-system concerns with bounded source inputs, evidence IDs, structured-output validation, review findings, and human approval.
+
+```text
+static analysis -> is the program internally consistent?
+tests           -> does the program follow its designed behavior?
+grounding       -> can a generated claim be traced to supplied evidence?
+human review    -> should this draft be trusted and used?
+```
+
+None replaces the others.
+
+## Useful operator inputs
+
+```bash
+python -m personal_ai_agent \
+  --request-timeout-seconds 45 \
+  --max-model-attempts 2 \
+  --max-output-tokens 1800 \
+  --output-format json \
+  run "A grounded topic" --repository "/path/to/project"
+```
+
+These values are operational controls, not prompt instructions. They keep expected latency, retries, and response size visible, then preserve that choice for a later resume.
+
+## Exercises
+
+1. Add and remove an unused import while observing `ruff`.
+2. Add a test for a malformed timestamp in `state.json`.
+3. Add one validated CLI argument and decide whether it must persist for resume.
+4. Change a model-output schema, validator, and fake-model test together.
+5. Explain why a successful type check does not establish that a model claim is true.
+
+For the complete local Markdown guide, read [`docs/learning/code-quality.md`](https://github.com/omidakhavans/personal-ai-agent/blob/main/docs/learning/code-quality.md).

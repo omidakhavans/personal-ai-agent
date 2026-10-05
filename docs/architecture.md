@@ -136,6 +136,10 @@ redirect. This is a network safety boundary: without it, a user-supplied URL
 could cause the local runtime to fetch an internal service and forward its text
 to a remote model.
 
+The fetcher deliberately ignores ambient machine proxy settings. That keeps the
+public-network boundary in application code rather than allowing a local proxy
+configuration to silently redirect resource traffic elsewhere.
+
 The report uses resource IDs such as `R1`. Source facts and interpretations must
 cite those IDs; the runtime rejects invented resource references before writing
 `resources-report.md`.
@@ -214,7 +218,24 @@ The runtime also verifies previously completed artifacts before resuming. A
 state file alone is not enough evidence that an earlier stage actually produced
 the file a later stage needs.
 
+The read-only `validate` CLI command performs the same state and artifact checks
+without resuming the workflow. It is useful for handoff or diagnosis because it
+does not invoke a model, spend tokens, or mutate a checkpoint.
+
 This lets the runtime recover without losing the audit trail.
+
+## Code Quality Boundaries
+
+The repository uses linting, type checking, behavioral tests, and static
+documentation checks in CI. These are ordinary software controls: they catch
+Python mistakes, interface drift, broken state-machine behavior, and broken site
+builds before a change is merged.
+
+They are not evidence evaluation. Static tools cannot establish that an LLM's
+technical claim is true or that a chosen excerpt is representative. Grounding
+validation, `review-blog`, and human approval remain separate AI-specific
+controls. See [Code Quality And Static Analysis](learning/code-quality.md) for
+the practical workflow.
 
 ## Failed vs Blocked
 
