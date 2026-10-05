@@ -15,6 +15,7 @@ from .research_work import ResearchWorkExecutor, ResearchWorkSettings
 from .runtime import Orchestrator, RuntimeErrorWithContext
 from .state import StateError, paths_for_run, read_private_config, read_state
 from .stages import RoutedStageExecutor
+from .write_blog import BlogWriterExecutor, BlogWriterSettings
 
 
 DEFAULT_RUNS_DIR = Path("runs")
@@ -154,10 +155,15 @@ def build_content_executor(
         settings=EvidenceContextSettings(model=model),
         client=OpenAIResponsesClient(),
     )
+    write_blog = BlogWriterExecutor(
+        settings=BlogWriterSettings(model=model),
+        client=OpenAIResponsesClient(max_output_tokens=2_400),
+    )
     return RoutedStageExecutor(
         research_work=research_work,
         research_resources=research_resources,
         evidence_context=evidence_context,
+        write_blog=write_blog,
     )
 
 

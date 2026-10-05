@@ -3,8 +3,9 @@
 This document teaches how the Phase 2 runtime currently works. It is not general project documentation. It traces one complete CLI execution from command input to final stage completion, then explains failure, blocking, and resume behavior.
 
 The implementation is intentionally small. The runtime lifecycle was built first;
-the `research-work`, `research-resources`, and `build-evidence-context` stages
-now make grounded model calls while the remaining stages are placeholders.
+the `research-work`, `research-resources`, `build-evidence-context`, and
+`write-blog` stages now make grounded model calls while later review and social
+stages remain placeholders.
 
 ## Read The Code With This Guide
 
@@ -292,7 +293,7 @@ Why it exists:
 - Ordinary software-engineering reason: if the process crashes, the state shows which stage was in progress.
 - Agent-system reason: real stages may call models, inspect files, browse docs, or wait on tools. Those operations are not guaranteed to complete. Persisting before execution gives the runtime a recovery point.
 
-### 7. The Placeholder Stage Executor Writes An Artifact
+### 7. The Stage Executor Writes An Artifact
 
 File: `personal_ai_agent/stages.py`
 
@@ -303,6 +304,7 @@ Important classes/functions:
 - `StageExecutor`
 - `RoutedStageExecutor.execute(stage, subject, run_dir)`
 - `ResearchWorkExecutor.execute(stage, subject, run_dir)`
+- `BlogWriterExecutor.execute(stage, subject, run_dir)`
 
 The orchestrator calls:
 
@@ -317,8 +319,9 @@ result = self.executor.execute(
 For a CLI-created run, `build_content_executor()` in `personal_ai_agent/cli.py`
 creates a `RoutedStageExecutor`. It routes `research-work` to
 `ResearchWorkExecutor`, `research-resources` to `ResourceResearchExecutor`, and
-`build-evidence-context` to `EvidenceContextExecutor`. The rest use
-`PlaceholderStageExecutor` for now.
+`build-evidence-context` to `EvidenceContextExecutor`. It routes `write-blog`
+to `BlogWriterExecutor`; the review and social stages use `PlaceholderStageExecutor`
+for now.
 
 `ResearchWorkExecutor.execute()` has a small grounded sequence:
 
@@ -342,10 +345,16 @@ earlier reports in the same run, extracts their `E…` and `R…` IDs, then crea
 `context-brief.md`. It rejects claims that cite invented IDs and requires an
 interpretation connecting work to resources to cite both kinds of evidence.
 
+`BlogWriterExecutor.execute()` reads only `context-brief.md`. It requires a
+ready article focus and known source references before calling the model. The
+model returns structured sections whose paragraphs and takeaways must each cite
+the supplied `E...` or `R...` IDs. The runtime validates those IDs, then writes
+`blog-draft.md` as `draft_for_human_review`.
+
 Why it exists:
 
 - Ordinary software-engineering reason: the executor separates "how a stage runs" from "how the workflow advances."
-- Agent-system reason: each remaining placeholder can be replaced with a real capability that calls a model, uses tools, and decides whether to complete, block, or fail. The orchestrator does not need to know the internals.
+- Agent-system reason: each stage can call a model, use tools, and decide whether to complete, block, or fail without changing the orchestrator. The remaining placeholders can follow the same pattern.
 
 This is the first runtime boundary that starts to look agent-shaped: the stage executor is where model intelligence and tool use will eventually live.
 
@@ -424,7 +433,7 @@ Then it writes the final `state.json`.
 Why it exists:
 
 - Ordinary software-engineering reason: a workflow needs a final success condition.
-- Agent-system reason: downstream processes need to know whether the full chain is usable. A completed run means the grounded research and context stages, plus the remaining placeholder stages, reached terminal success for this version.
+- Agent-system reason: downstream processes need to know whether the full chain is usable. A completed run means the grounded research, context, and blog-draft stages, plus the remaining placeholder stages, reached terminal success for this version.
 
 In the future, "completed" will not mean "published" or "perfect." It will mean the runtime successfully produced draft artifacts that still need human review.
 
@@ -451,7 +460,8 @@ x-draft.md
 Responsible code:
 
 - `personal_ai_agent/stages.py`
-- `PlaceholderStageExecutor.execute(...)`
+- `BlogWriterExecutor.execute(...)` in `personal_ai_agent/write_blog.py`
+- `PlaceholderStageExecutor.execute(...)` for later review and social stages
 
 Why artifacts exist:
 
@@ -617,6 +627,7 @@ Test coverage:
 | Run paths | `personal_ai_agent/state.py` | `RunPaths`, `paths_for_run()` | Keeps path construction consistent. |
 | Stage contract | `personal_ai_agent/stages.py` | `Stage`, `StageResult`, `StageExecutor` | Defines how stages and executors communicate. |
 | Workflow definition | `personal_ai_agent/stages.py` | `WORKFLOW_STAGES` | Defines deterministic stage order and artifact names. |
+| Grounded blog writer | `personal_ai_agent/write_blog.py` | `BlogWriterExecutor.execute()` | Turns prepared evidence context into a cited draft for review. |
 | Placeholder execution | `personal_ai_agent/stages.py` | `PlaceholderStageExecutor.execute()` | Proves runtime behavior before LLM capability work. |
 | Test executor | `personal_ai_agent/stages.py` | `MappingStageExecutor` | Makes failure/blocking/resume scenarios easy to test. |
 
@@ -655,7 +666,6 @@ Suggested future docs:
 docs/learning/stage-research-work.md
 docs/learning/stage-research-resources.md
 docs/learning/stage-build-evidence-context.md
-docs/learning/stage-write-blog.md
 docs/learning/stage-review-blog.md
 docs/learning/stage-write-linkedin.md
 docs/learning/stage-write-x.md

@@ -34,14 +34,14 @@ validation, and a `blocked` outcome when continuing would be misleading.
 
 ## 2. What Exists Today
 
-The workflow has seven named stages, but only the first three are real:
+The workflow has seven named stages, but only the first four are real:
 
 ```text
 subject
   -> research-work                 real
   -> research-resources            real
   -> build-evidence-context        real
-  -> write-blog                    placeholder
+  -> write-blog                    real
   -> review-blog                   placeholder
   -> write-linkedin                placeholder
   -> write-x                       placeholder
@@ -240,10 +240,10 @@ Live model evaluation is still valuable, but it is a different activity. Unit
 tests prove runtime rules; sample runs with real artifacts help judge research
 quality, writing usefulness, and prompt behavior.
 
-## 11. The Next Build: Grounded Blog Writing
+## 11. Stage Four: Grounded Blog Writing
 
-The next stage is `write-blog`. It should read only `context-brief.md`, not
-restart research or browse the repository.
+`write-blog` reads only `context-brief.md`. It does not restart research or
+browse the repository.
 
 Its job will be grounded generation:
 
@@ -254,10 +254,11 @@ context-brief.md
   -> human review
 ```
 
-The writer may choose language and structure, but it should not invent what you
-built. It should retain uncertainty for review and avoid turning interpretations
-into facts. After that, `review-blog` becomes the next quality gate before
-LinkedIn and X transformations.
+The writer returns structured JSON with cited paragraphs and takeaways. The
+runtime rejects unknown or empty citations, then renders `blog-draft.md` with
+source references and review caveats. The writer may choose language and
+structure, but it should not invent what you built. After that, `review-blog`
+becomes the next quality gate before LinkedIn and X transformations.
 
 ## 12. Exercises
 
@@ -270,7 +271,7 @@ LinkedIn and X transformations.
    returns `recommended_article_focus.status = "insufficient_evidence"`.
 4. Add a maximum total context-size limit across both research reports and make
    the failure message explain which artifact is too large.
-5. Implement `write-blog` using the same pattern: bounded artifact input,
+5. Implement `review-blog` using the same pattern: bounded artifact input,
    structured model output, validation, Markdown rendering, tests, and a stage
    walkthrough.
 

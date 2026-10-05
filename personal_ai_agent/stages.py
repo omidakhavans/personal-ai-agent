@@ -93,11 +93,13 @@ class RoutedStageExecutor:
         research_work: StageExecutor,
         research_resources: StageExecutor | None = None,
         evidence_context: StageExecutor | None = None,
+        write_blog: StageExecutor | None = None,
         fallback: StageExecutor | None = None,
     ) -> None:
         self.research_work = research_work
         self.research_resources = research_resources
         self.evidence_context = evidence_context
+        self.write_blog = write_blog
         self.fallback = fallback or PlaceholderStageExecutor()
 
     def execute(self, *, stage: Stage, subject: str, run_dir: Path) -> StageResult:
@@ -107,6 +109,8 @@ class RoutedStageExecutor:
             return self.research_resources.execute(stage=stage, subject=subject, run_dir=run_dir)
         if stage.name == "build-evidence-context" and self.evidence_context:
             return self.evidence_context.execute(stage=stage, subject=subject, run_dir=run_dir)
+        if stage.name == "write-blog" and self.write_blog:
+            return self.write_blog.execute(stage=stage, subject=subject, run_dir=run_dir)
         return self.fallback.execute(stage=stage, subject=subject, run_dir=run_dir)
 
 

@@ -16,4 +16,4 @@ Use a model only for bounded interpretation and generation.
 
 This keeps a model useful without allowing it to silently decide what files to read, what evidence exists, or whether an artifact was actually written.
 
-The next functional capability is grounded `write-blog`, which should consume only the evidence-context artifact and remain a draft for human review.
+The next functional capability is evidence-aware `review-blog`, which should compare a blog draft with its evidence context before social transformations can use it.

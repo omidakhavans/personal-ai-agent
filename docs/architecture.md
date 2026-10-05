@@ -28,9 +28,9 @@ Agent = Runtime + Model + Tools + Instructions + State
 
 The runtime coordinates execution and persistence. The model provides reasoning and language generation. Tools provide external actions. Instructions define behavior. State records what has happened.
 
-Step 1 implemented the runtime skeleton. Phase 2 now has three real
+Step 1 implemented the runtime skeleton. Phase 2 now has four real
 capabilities: grounded repository research, grounded supplied-resource research,
-and evidence-context construction.
+evidence-context construction, and grounded blog drafting.
 
 ## Runtime Shape
 
@@ -137,6 +137,21 @@ to a remote model.
 The report uses resource IDs such as `R1`. Source facts and interpretations must
 cite those IDs; the runtime rejects invented resource references before writing
 `resources-report.md`.
+
+## Grounded Blog Drafting
+
+`write-blog` receives one prepared `context-brief.md`, not the repository or
+raw resources:
+
+```text
+context brief -> cited structured draft -> validated blog-draft.md
+```
+
+The writer requires a ready article focus and at least one traceable source ID.
+Each generated paragraph and takeaway carries known `E...` or `R...` IDs, which
+the runtime validates before rendering Markdown. This constrains generation to
+prepared evidence while leaving the model room to choose useful structure and
+language. It does not replace human editorial or technical review.
 
 ## Evidence Context
 

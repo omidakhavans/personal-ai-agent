@@ -15,7 +15,9 @@ this repository. Read it in this order.
    - Learn how explicitly supplied local files and URLs become source-backed knowledge.
 5. [Evidence Context Stage](stage-build-evidence-context.md)
    - Learn how the runtime reduces research into a compact writer-ready brief.
-6. [Runtime Hardening](runtime-hardening.md)
+6. [Write Blog Stage](stage-write-blog.md)
+   - Learn how structured, cited generation turns the brief into a draft for review.
+7. [Runtime Hardening](runtime-hardening.md)
    - Learn why safety, artifact verification, durable state, and retries belong
      in the runtime rather than in individual AI prompts.
 
@@ -34,14 +36,15 @@ credentials, and other local data.
 
 ## Current Boundary
 
-The current runtime has three real stages:
+The current runtime has four real stages:
 
 ```text
-research-work -> research-resources -> build-evidence-context
+research-work -> research-resources -> build-evidence-context -> write-blog
 ```
 
-The later writing and review stages are intentionally still placeholders. That
-lets you learn the research-to-context foundation before adding more generation.
+The later review and social stages are intentionally still placeholders. This
+lets you learn evidence-grounded generation before adding evaluation and
+platform-specific transformation.
 
 ## Run The Tests
 

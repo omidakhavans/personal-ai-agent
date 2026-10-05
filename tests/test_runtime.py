@@ -55,6 +55,12 @@ from personal_ai_agent.state import (
     write_private_config,
     write_state,
 )
+from personal_ai_agent.write_blog import (
+    BlogWriterExecutor,
+    BlogWriterSettings,
+    collect_blog_inputs,
+    validate_blog_draft,
+)
 
 
 class RuntimeTests(unittest.TestCase):
@@ -337,6 +343,29 @@ def valid_context_brief() -> dict[str, Any]:
         "unknowns": ["The supplied reports do not establish production impact."],
         **empty_sections,
     }
+
+
+def valid_blog_draft() -> dict[str, Any]:
+    work_paragraph = {
+        "text": "The repository documents a tool-calling feature, which gives the article a concrete implementation anchor.",
+        "work_evidence_ids": ["E1"],
+        "resource_ids": [],
+    }
+    connection_paragraph = {
+        "text": "The implementation can be explained alongside the supplied definition of tool calling without claiming production impact.",
+        "work_evidence_ids": ["E1"],
+        "resource_ids": ["R1"],
+    }
+    return {
+        "title": "What Tool Calling Taught Me About Grounded AI Workflows",
+        "subtitle": "A draft grounded in repository evidence and a supplied technical note.",
+        "sections": [
+            {"heading": "Start with what the code proves", "paragraphs": [work_paragraph]},
+            {"heading": "Connect implementation to the concept", "paragraphs": [connection_paragraph]},
+        ],
+        "key_technical_takeaways": [connection_paragraph],
+        "review_caveats": ["The evidence does not establish production impact or measured results."],
+    }
 class ResearchWorkTests(unittest.TestCase):
     def test_collects_narrow_subject_evidence(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -592,6 +621,132 @@ class EvidenceContextTests(unittest.TestCase):
 
             with self.assertRaisesRegex(RuntimeError, "unknown work evidence IDs"):
                 validate_context_brief(brief, collect_context_inputs(run_dir))
+
+
+class WriteBlogTests(unittest.TestCase):
+    def test_writer_creates_grounded_draft_after_context_stage(self) -> None:
+        with TemporaryDirectory() as tmp:
+            resource_path = Path(tmp) / "tool-calling.md"
+            resource_path.write_text("# Tool calling\n\nA model can request a tool.\n", encoding="utf-8")
+            repository = Path(tmp) / "repository"
+            repository.mkdir()
+            (repository / "README.md").write_text("Tool calling is used here.\n", encoding="utf-8")
+            runs_dir = Path(tmp) / "runs"
+            writer_model = FakeModelClient(valid_blog_draft())
+            state = Orchestrator(
+                runs_dir=runs_dir,
+                executor=RoutedStageExecutor(
+                    research_work=ResearchWorkExecutor(
+                        settings=ResearchWorkSettings(repository=repository, model="test-model"),
+                        client=FakeModelClient(valid_research_report()),
+                    ),
+                    research_resources=ResourceResearchExecutor(
+                        settings=ResearchResourcesSettings(references=(str(resource_path),), model="test-model"),
+                        client=FakeModelClient(valid_resource_report()),
+                    ),
+                    evidence_context=EvidenceContextExecutor(
+                        settings=EvidenceContextSettings(model="test-model"),
+                        client=FakeModelClient(valid_context_brief()),
+                    ),
+                    write_blog=BlogWriterExecutor(
+                        settings=BlogWriterSettings(model="test-model"),
+                        client=writer_model,
+                    ),
+                ),
+            ).start("What I learned about tool calling")
+            draft = (paths_for_run(runs_dir, state["run_id"]).run_dir / "blog-draft.md").read_text(
+                encoding="utf-8"
+            )
+
+            self.assertEqual(state["stages"]["write-blog"]["status"], STAGE_COMPLETED)
+            self.assertEqual(len(writer_model.calls), 1)
+            self.assertIn("## Article Draft", draft)
+            self.assertIn("Work: E1; Resources: R1", draft)
+            self.assertIn("draft_for_human_review", draft)
+
+    def test_writer_blocks_without_a_context_brief(self) -> None:
+        with TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            run_dir.mkdir()
+            model = FakeModelClient(valid_blog_draft())
+            writer = BlogWriterExecutor(
+                settings=BlogWriterSettings(model="test-model"),
+                client=model,
+            )
+
+            result = writer.execute(
+                stage=next(stage for stage in WORKFLOW_STAGES if stage.name == "write-blog"),
+                subject="Tool calling",
+                run_dir=run_dir,
+            )
+
+            self.assertEqual(result.status, STAGE_BLOCKED)
+            self.assertEqual(model.calls, [])
+            self.assertIn("Evidence context brief is missing", (run_dir / "blog-draft.md").read_text(encoding="utf-8"))
+
+    def test_writer_blocks_when_context_does_not_recommend_an_article(self) -> None:
+        with TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            run_dir.mkdir()
+            (run_dir / "context-brief.md").write_text(
+                "\n".join(
+                    [
+                        "# Evidence Context Brief",
+                        "",
+                        "## Recommended Article Focus",
+                        "",
+                        "- insufficient_evidence: The available evidence does not support an article.",
+                        "",
+                        "## Source And Evidence References",
+                        "",
+                        "- Work evidence `E1`: `README.md`",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            model = FakeModelClient(valid_blog_draft())
+            writer = BlogWriterExecutor(
+                settings=BlogWriterSettings(model="test-model"),
+                client=model,
+            )
+
+            result = writer.execute(
+                stage=next(stage for stage in WORKFLOW_STAGES if stage.name == "write-blog"),
+                subject="Tool calling",
+                run_dir=run_dir,
+            )
+
+            self.assertEqual(result.status, STAGE_BLOCKED)
+            self.assertEqual(model.calls, [])
+            self.assertIn("ready, evidence-supported article focus", (run_dir / "blog-draft.md").read_text(encoding="utf-8"))
+
+    def test_writer_validation_rejects_invented_evidence(self) -> None:
+        with TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            run_dir.mkdir()
+            (run_dir / "context-brief.md").write_text(
+                "\n".join(
+                    [
+                        "# Evidence Context Brief",
+                        "",
+                        "## Recommended Article Focus",
+                        "",
+                        "- ready: Explain the grounded lesson. (Evidence: Work: E1)",
+                        "",
+                        "## Source And Evidence References",
+                        "",
+                        "- Work evidence `E1`: `README.md`",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            draft = valid_blog_draft()
+            draft["sections"][0]["paragraphs"][0]["work_evidence_ids"] = ["E999"]
+
+            with self.assertRaisesRegex(RuntimeError, "unknown work evidence"):
+                validate_blog_draft(draft, collect_blog_inputs(run_dir))
 
 
 class ModelClientTests(unittest.TestCase):

@@ -6,12 +6,12 @@ This repository starts rebuilding the Phase 1 Content Agent outside Codex. Phase
 
 ## Current Status
 
-Phase 2 now has real, LLM-powered `research-work`, `research-resources`, and
-`build-evidence-context` stages. The writing and review stages are still
-placeholders.
+Phase 2 now has real, LLM-powered `research-work`, `research-resources`,
+`build-evidence-context`, and `write-blog` stages. Review and social stages are
+still placeholders.
 
 The runtime lifecycle was validated first with placeholder stages. It now has
-three real stages while the remaining stages still use placeholders:
+four real stages while the remaining stages still use placeholders:
 
 - run creation
 - run directories
@@ -58,6 +58,11 @@ which can result in another model call and should be intentional.
 selects only the strongest traceable claims, and writes `context-brief.md`. It
 keeps unknowns, unsupported claims, and missing-resource limitations visible to
 the later writing stages.
+
+`write-blog` reads only `context-brief.md`, requires a ready article focus and
+traceable evidence references, and writes `blog-draft.md`. Every generated
+paragraph and takeaway must cite known work or resource evidence. The artifact
+is explicitly `draft_for_human_review`; it is never published by this runtime.
 
 ## Workflow
 

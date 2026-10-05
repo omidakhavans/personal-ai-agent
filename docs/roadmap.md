@@ -102,6 +102,28 @@ This is the first context-engineering stage. It reduces and structures prior
 research before later generation, rather than asking a writer to recover the
 important facts from every raw artifact.
 
+## Step 5: Grounded `write-blog`
+
+Status: Complete.
+
+Implemented:
+
+- Input reads only from the current run's `context-brief.md`.
+- A ready article focus and traceable `E...` or `R...` references are required
+  before the writer can call a model.
+- The raw model client returns a structured draft: title, subtitle, sections,
+  cited paragraphs, cited takeaways, and review caveats.
+- Validation rejects empty citations and IDs that the context brief did not
+  supply.
+- The runtime renders `blog-draft.md` with evidence references, uncertainty,
+  and `draft_for_human_review` status.
+- A missing, malformed, oversized, or insufficient context brief produces a
+  visible blocked artifact rather than an invented article.
+
+This is grounded generation. The model has creative responsibility for article
+structure and explanation, while application code constrains it to a prepared,
+traceable context package. A completed draft is not publication approval.
+
 ## Learning Documentation
 
 The current Phase 2 learning sequence lives in `docs/learning/README.md`.
@@ -110,29 +132,31 @@ walkthroughs. Keep a new stage walkthrough beside every future real capability.
 
 ## Recommended Next Phase 2 Task
 
-Add a real `write-blog` capability.
+Add an evidence-aware `review-blog` capability.
 
 Why this should come next:
 
-- `research-work` and `research-resources` now produce traceable source reports.
-- `build-evidence-context` now reduces them to one high-signal, grounded brief.
-- A blog draft is the next canonical artifact from which later social content can derive.
+- `write-blog` now produces a grounded, cited canonical draft.
+- The next risk is not generating more channels; it is accepting a persuasive
+  but misleading interpretation before downstream transformation.
+- Review can compare the draft with the same context brief and surface factual,
+  technical, and editorial issues for a human to decide.
 
 Suggested scope:
 
 ```text
-write-blog executor
-  -> read context-brief.md
-  -> generate a technical article draft from selected evidence only
-  -> preserve source references and open uncertainties for human review
+review-blog executor
+  -> read blog-draft.md and context-brief.md
+  -> identify unsupported, exaggerated, or unclear claims
+  -> preserve material findings and evidence references
   -> call a raw LLM API with bounded context
-  -> write blog-draft.md
+  -> write blog-review.md
   -> return completed or blocked
 ```
 
 Do not implement this until explicitly requested.
 
-## Step 5: Runtime Hardening
+## Runtime Hardening
 
 Status: Complete.
 
@@ -151,15 +175,13 @@ Implemented:
 - Public-HTTPS-only resource fetching with private-network and redirect checks.
 - Bounded model output plus bounded retry behavior for transient API failures.
 
-The next functional capability remains grounded `write-blog`. It should consume
-only `context-brief.md`, preserve its citations and unknowns, and remain a draft
-for human review. The runtime foundations are now strong enough to add that
-generation capability without duplicating safety policy in every later stage.
+The runtime foundations now support grounded generation without duplicating
+safety policy in every stage. The next capability is evidence-aware review,
+which should keep the same traceability boundary before social transformation.
 
 ## Later Ideas
 
 - Add a simple workflow configuration file.
-- Add grounded blog generation.
 - Add evidence-aware review.
 - Add social transformation.
 - Add human approval checkpoints.

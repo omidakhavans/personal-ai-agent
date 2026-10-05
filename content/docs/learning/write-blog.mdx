@@ -1,0 +1,28 @@
+---
+title: Write Blog
+description: Turn one evidence context into a grounded, reviewable technical draft.
+---
+
+## Purpose
+
+`write-blog` is the first grounded-generation stage. It reads only the current run's `context-brief.md` and writes `blog-draft.md`. It does not repeat repository research, fetch resources, publish, or create social content.
+
+## Grounded generation
+
+Before it calls a model, the writer requires a ready article focus and at least one traceable `E...` work-evidence or `R...` resource reference. The context is size-limited, treated as untrusted data, and redacted before the model sees it.
+
+The model returns structured JSON: title, subtitle, sections, cited paragraphs, cited takeaways, and review caveats. Every paragraph and takeaway must cite allowed evidence IDs. The runtime rejects missing or invented citations before it renders Markdown.
+
+The result is a draft, not publication approval. `blog-draft.md` preserves source references and uncertainty, then marks itself `draft_for_human_review`.
+
+## Why this matters
+
+Research context is not automatically a trustworthy article. Grounded generation constrains the writer with trusted source content, explicit boundaries, and a structured output contract. That reduces hallucination and cross-stage inconsistency while leaving the model useful for narrative structure and explanation.
+
+## Outcomes
+
+- `completed`: a validated draft was saved.
+- `blocked`: no safe, ready evidence context exists; no model call is made.
+- `failed`: the model request or output contract failed.
+
+Human review is still required. The next capability should evaluate the article against its context before any platform-specific transformation is introduced.
