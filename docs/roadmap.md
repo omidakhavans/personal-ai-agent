@@ -74,8 +74,7 @@ implementation.
 
 ## Phase 3: Production-Style Agent Platform
 
-Status: In progress. Milestones 3.1, 3.2, and the persistence foundation of
-3.3 are complete.
+Status: In progress. Milestones 3.1 through 3.4 are complete.
 
 ### Goal
 
@@ -164,12 +163,19 @@ import or compatibility path exists.
 
 #### 3.4 Execution History, Audit Trail, And Recovery
 
-Status: Planned.
+Status: Complete.
 
-Make each state transition and meaningful operator action queryable. Add
-checkpoint and retry semantics that are safe to inspect and resume. This is
-where a run list and detailed run timeline become possible without treating
-application logs as the source of truth.
+The PostgreSQL adapter now appends a small, ordered event vocabulary when a
+snapshot transition is checkpointed. It records run creation/start/terminal
+status, stage start/terminal status, and approval requests/completion in the
+same transaction as the current snapshot. `RunStage.attempts` remains the only
+meaningful attempt record today because the runtime has stage retries but no
+worker-level whole-run retry identity.
+
+`RunQueryService` DTOs provide newest-first keyset pages, status/date filters,
+and safe run details without exposing ORM rows, artifact bytes, private resume
+configuration, provider secrets, or technical logs. The filesystem adapter
+continues to run the existing CLI workflow unchanged.
 
 #### 3.5 API And Typed Contracts
 
@@ -242,22 +248,23 @@ search; it is not a default platform dependency.
 
 ## Next Phase 3 Implementation Task
 
-**Implement Milestone 3.4: queryable execution history, audit events, and
-recovery semantics.**
+**Implement Milestone 3.5: FastAPI application use cases and typed API
+contracts.**
 
 The first pull request should be intentionally narrow:
 
-- add append-only lifecycle and operator events, separate attempt history from
-  the current stage checkpoint, and define query views for a run list and
-  detail timeline;
-- keep ORM entities out of domain and application code;
-- retain the file adapter as the active compatibility path until migration is
-  deliberately enabled; and
-- extend repository contract tests for both file and PostgreSQL adapters.
+- add application commands and queries for starting, listing, reading,
+  validating, resuming, and approving runs;
+- use FastAPI and Pydantic only at the HTTP boundary, keeping the DTO/query
+  layer framework-independent;
+- preserve the CLI workflow and make it a caller of the same application use
+  cases where practical; and
+- define authentication, authorization, and artifact-read policy before
+  exposing a remote operator endpoint.
 
-Do not add FastAPI, Redis, a UI, provider configuration, or publishers in that
-task. Queryable history should be proved before exposing it through another
-interface.
+Do not add a UI, Redis, provider configuration, or publishers in that task.
+The API should expose only the queries and commands that the current platform
+can safely support.
 
 ## Phase 4: Admin GUI / Agent Control Plane
 
@@ -272,10 +279,9 @@ create controls with no safe source of truth.
 
 The correct delivery order is:
 
-1. Finish queryable run history and events (3.4).
-2. Add tested FastAPI use cases and typed request/response contracts (3.5).
-3. Build the Phase 4.1 Vite admin shell and API client against those contracts.
-4. Add run history/detail, then configuration and integration surfaces only as
+1. Add tested FastAPI use cases and typed request/response contracts (3.5).
+2. Build the Phase 4.1 Vite admin shell and API client against those contracts.
+3. Add run history/detail, then configuration and integration surfaces only as
    their corresponding backend capabilities exist.
 
 ## Future-Session Handoff

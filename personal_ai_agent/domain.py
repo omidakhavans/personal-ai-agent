@@ -166,9 +166,16 @@ class RunSnapshot:
 
 @dataclass(frozen=True)
 class RunEvent:
-    """Future append-only lifecycle event contract, not persisted in Phase 3.2."""
+    """Framework-independent shape for one append-only lifecycle transition.
 
-    kind: str
+    The PostgreSQL adapter owns storage and sequence allocation; query DTOs own
+    consumer-facing projections. This record keeps the business concept free of
+    either ORM or transport concerns.
+    """
+
+    sequence: int
+    event_type: str
     occurred_at: str
-    message: str
     stage_name: str | None = None
+    schema_version: int = 1
+    payload: dict[str, Any] | None = None

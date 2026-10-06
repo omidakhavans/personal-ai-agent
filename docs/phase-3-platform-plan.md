@@ -4,9 +4,10 @@
 
 Phase 3 evolves the completed Phase 2 local runtime into a small,
 production-style agent platform. Milestones 3.1 and 3.2 are complete, and the
-foundation of 3.3 is implemented: SQLAlchemy mappings, an Alembic migration,
-and a PostgreSQL-targeted run repository behind the existing port. The remaining
-milestones are a plan. It does not include an API, worker, or publisher yet.
+foundations of 3.3 and 3.4 are implemented: SQLAlchemy mappings, Alembic
+migrations, a PostgreSQL-targeted run repository, immutable execution events,
+and storage-neutral run queries. The remaining milestones are a plan. It does
+not include an API, worker, or publisher yet.
 
 The Phase 3 backend target is Python 3.12+ with FastAPI, Pydantic v2,
 SQLAlchemy 2, and Alembic introduced at the boundaries that need them.
@@ -295,27 +296,35 @@ automatically the right place for every blob or transient value.
 
 ### 3.4 Execution History And Recovery
 
-**Objective:** turn lifecycle changes into a queryable audit trail.
+**Status:** Complete.
+
+**Objective:** turn current lifecycle changes into a queryable audit trail.
 
 **Reuse:** run/step states and `validate_run` invariants.
 
-**New components:** transition service, append-only events, checkpoint version
-policy, retry/lease policy, and history queries.
+**Delivered components:** an append-only `run_events` table, a small
+transition-derived event vocabulary, a per-run unique sequence, event payload
+schema versioning, and `RunQueryService` read DTOs for list and detail queries.
 
-**Database/migration:** add event and checkpoint indexes; retain artifact
-checksum/provenance metadata.
+**Database/migration:** migration `20261006_0002` adds event rows with a
+per-run sequence constraint and indexes. The existing `run_stages.attempts`
+counter remains the meaningful stage-attempt record; a separate whole-run
+attempt identity is deferred until a worker retry has defined semantics.
 
 **Risks:** confusing logs with audit events or claiming exactly-once execution
 when external model calls cannot guarantee it.
 
-**Tests:** legal/illegal transition matrix, duplicate approval protection,
-concurrent resume lease behavior, and history ordering.
+**Tests:** adapter contract test, normal orchestrator event timeline, event
+ordering, status/date filtering, keyset pagination, run detail projection, and
+redaction of query-visible failure messages.
 
-**Done means:** an operator can answer what happened, why it stopped, and which
-artifact/configuration a stage used without reading server logs.
+**Done means:** an operator-facing adapter can list runs and inspect safe
+checkpoint/event history without reading run directories or server logs.
 
 **Learning objective:** agent systems need durable decision history because
 model and tool calls are expensive, non-deterministic, and often external.
+Snapshots support recovery; events explain transitions; technical logs remain
+diagnostic data rather than business truth.
 
 ### 3.5 API And Typed Contracts
 

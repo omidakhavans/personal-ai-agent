@@ -11,8 +11,8 @@ The audit found an important prerequisite: Phase 3.2 introduced only a
 filesystem persistence boundary. The repository did not yet have PostgreSQL,
 Alembic, HTTP routes, query use cases, configuration records, or credentials.
 This means a useful Phase 4.1 cannot safely be an editable dashboard yet. The
-first implementation work is the PostgreSQL persistence foundation; the next
-is queryable history and the API.
+PostgreSQL persistence foundation and queryable history are complete; the next
+required boundary is the API.
 
 ## Capability Map
 
@@ -78,8 +78,9 @@ deployable as static content.
 1. **3.3 Persistence foundation (complete):** SQLAlchemy mapping, Alembic
    migration, and a PostgreSQL-targeted repository adapter behind the current
    port. File artifacts and private resume configuration remain separate.
-2. **3.4 Execution history:** append-only events, attempt/checkpoint history,
-   run-list and run-detail queries, and recovery rules.
+2. **3.4 Execution history (complete):** append-only transition events,
+   existing stage-attempt counts, keyset-paginated run-list queries, and safe
+   run-detail DTOs.
 3. **3.5 API contracts:** FastAPI routes for existing safe actions, typed
    schemas, API tests, and no browser-visible secrets.
 4. **4.1 Admin foundation:** separate Vite workspace, application shell,

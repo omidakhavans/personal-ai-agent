@@ -1,0 +1,91 @@
+---
+title: Durable Run History
+description: How snapshots, immutable events, and query DTOs support a future control plane.
+---
+
+Phase 3.4 turns the database adapter into a useful source of operator history
+without turning the system into an event-sourced application.
+
+## Five different things
+
+The words are easy to blur together, but they have different jobs.
+
+| Concept | What this project uses it for |
+| --- | --- |
+| Runtime state | The mutable Python objects being advanced by the orchestrator. |
+| Snapshot | The latest persisted `RunSnapshot`, used for resume and current status. |
+| Run history | The durable, queryable record of what happened to a run. |
+| Event | One immutable business-history entry such as `step.completed`. |
+| Technical log | Diagnostic output, traces, or provider detail; not business history. |
+
+The snapshot is still the source of truth for resuming. Events add explanation
+for a timeline. They are not replayed to rebuild state, which keeps the first
+history design small and understandable.
+
+## What is stored
+
+The PostgreSQL adapter keeps the current run and current stage checkpoints in
+the existing tables. It now adds `run_events`. An event has a sequence unique
+within its run, a type, an optional stage name, a timestamp, a small
+schema-versioned payload, and no artifact content.
+
+The initial vocabulary comes from real runtime transitions only:
+
+```text
+run.created
+run.started
+run.completed / run.failed / run.blocked
+run.awaiting_approval / approval.completed
+step.started / step.completed / step.failed / step.blocked
+approval.requested
+```
+
+Changing a snapshot and adding the events that explain that change happen in
+one database transaction. That avoids a completed run with no matching
+completion event.
+
+## Attempts without pretending
+
+The runtime already has a meaningful retry count: each workflow stage tracks
+how many times it entered `running`. Phase 3.4 preserves that as
+`stage_attempt_count` in query results.
+
+There is no separate worker system or whole-run retry identifier yet. Creating
+a `run_attempts` table now would give a name to behavior the runtime does not
+actually implement. When background workers arrive, a worker execution attempt
+can become a distinct durable concept without rewriting stage history.
+
+## Query models, not database rows
+
+`RunQueryService` is the read boundary. It returns plain dataclasses:
+
+- `RunListItem` for a future history table;
+- `RunPage` for newest-first keyset pagination;
+- `RunDetail`, `RunStageView`, and `RunEventView` for a future detail page.
+
+The query service does not return ORM entities, local artifact paths, private
+resume inputs, or raw artifact contents. This means the later FastAPI layer can
+translate read models into HTTP responses without inheriting database behavior.
+
+## Why keyset pagination
+
+Run history uses `created_at DESC, run_id DESC`. The cursor includes both
+values. When a new run appears while an operator is reading page one, the next
+page remains stable because it continues after the last item already seen.
+
+Offset pagination is simpler to explain, but it can skip or duplicate rows when
+new records arrive between requests. Keyset pagination is only a little more
+code here and fits a growing run-history table better.
+
+## Sensitive-data boundary
+
+Event payloads contain only small transition metadata. The adapter applies the
+existing redactor before writing or returning event payloads and error summaries.
+It does not save prompts, model responses, provider request headers, API keys,
+OAuth tokens, or machine-local resume configuration in event history.
+
+## Next step
+
+The durable read model is now ready for a transport adapter. Phase 3.5 will add
+a small FastAPI boundary that exposes only existing safe queries and commands.
+It will not build the browser control plane yet.

@@ -18,10 +18,10 @@ Phase 2 makes those responsibilities explicit in application code.
 
 ## Phase 3 Direction
 
-Phase 2 is complete as a local, file-backed runtime. Phase 3.2 is also
-complete: typed domain contracts and persistence ports now wrap the existing
-filesystem behavior. The next incremental step is a PostgreSQL adapter, then
-execution history, API, operator control plane, configuration, controlled
+Phase 2 is complete as a local, file-backed runtime. Phase 3.4 now adds a
+PostgreSQL persistence adapter, append-only execution history, and safe query
+DTOs while preserving the file-backed compatibility path. The next incremental
+step is an API, then an operator control plane, configuration, controlled
 publishers, jobs, and observability.
 
 The important boundary is not "files versus database." It is workflow policy
@@ -244,6 +244,32 @@ without resuming the workflow. It is useful for handoff or diagnosis because it
 does not invoke a model, spend tokens, or mutate a checkpoint.
 
 This lets the runtime recover without losing the audit trail.
+
+## Durable Run History
+
+The runtime state is the mutable in-memory checkpoint being advanced.
+`RunSnapshot` is its durable latest representation. A `RunEvent` is different:
+it is an immutable explanation of a transition already committed to durable
+state. The event table is not event sourcing and does not replace the snapshot
+as the source for resume behavior.
+
+The PostgreSQL adapter writes run-status and stage-status events in the same
+transaction as the corresponding snapshot update. Events have a unique sequence
+within a run, so a timeline remains deterministic even when timestamps match.
+Only stable metadata is stored: status changes, stage names, and stage-attempt
+numbers. Raw prompts, model responses, credentials, and technical logs do not
+belong in business history.
+
+Current retry semantics are stage-level: each `run_stages` checkpoint has an
+`attempts` counter, incremented when that stage enters `running`. The runtime
+does not yet have a worker system or separate whole-run retry identity, so it
+does not pretend that a `run_attempts` table means something it cannot enforce.
+
+`RunQueryService` returns plain read models for pages and details. A future API
+or browser consumes those models, not filesystem directories or SQLAlchemy ORM
+objects. Its newest-first keyset cursor uses `created_at` plus `run_id`; this is
+more stable than offset pagination when new runs arrive while an operator is
+browsing history.
 
 ## Code Quality Boundaries
 

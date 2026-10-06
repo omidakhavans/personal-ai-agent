@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -40,6 +41,7 @@ from personal_ai_agent.review_blog import (
     BlogReviewerExecutor,
     BlogReviewerSettings,
 )
+from personal_ai_agent.run_queries import RunListFilters
 from personal_ai_agent.runtime import Orchestrator, RuntimeErrorWithContext
 from personal_ai_agent.social_writing import (
     LinkedInWriterExecutor,
@@ -82,6 +84,7 @@ from personal_ai_agent.write_blog import (
 
 try:
     from personal_ai_agent.postgres import (
+        SqlAlchemyRunQueryService,
         SqlAlchemyRunRepository,
         create_schema_for_tests,
         create_test_engine,
@@ -382,6 +385,78 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(restored.to_dict(), snapshot.to_dict())
             self.assertEqual(repository.load_private_config(workspace), private_config)
             self.assertTrue(workspace.run_dir.is_dir())
+
+    @unittest.skipUnless(SQLALCHEMY_AVAILABLE, "SQLAlchemy is installed in CI and production environments.")
+    def test_sqlalchemy_history_queries_are_ordered_filtered_and_paginated(self) -> None:
+        """The future control plane reads DTOs, never directories or ORM rows."""
+        with TemporaryDirectory() as tmp:
+            engine = create_test_engine()
+            create_schema_for_tests(engine)
+            repository = SqlAlchemyRunRepository(engine=engine, artifact_root=Path(tmp) / "artifacts")
+            query_service = SqlAlchemyRunQueryService(repository)
+
+            completed = RunSnapshot.create(
+                run_id="20261006-120000-1234abcd", subject="Completed run", inputs={"model": "test-model"}
+            )
+            completed.created_at = "2026-10-06T12:00:00+00:00"
+            first_workspace = repository.create(completed)
+            completed.status = RUN_COMPLETED
+            repository.save(first_workspace, completed)
+
+            failed = RunSnapshot.create(
+                run_id="20261006-120001-1234abcd", subject="Failed run", inputs={"model": "test-model"}
+            )
+            failed.created_at = "2026-10-06T12:01:00+00:00"
+            second_workspace = repository.create(failed)
+            failed.status = RUN_FAILED
+            failed.stages["research-work"].status = STAGE_FAILED
+            failed.stages["research-work"].message = "token=secret-value-must-not-leak"
+            repository.save(second_workspace, failed)
+            repository.save(second_workspace, failed)
+
+            first_page = query_service.list_runs(limit=1)
+            self.assertEqual(first_page.items[0].run_id, failed.run_id)
+            self.assertIsNotNone(first_page.next_cursor)
+            second_page = query_service.list_runs(limit=1, cursor=first_page.next_cursor)
+            self.assertEqual(second_page.items[0].run_id, completed.run_id)
+            self.assertEqual(
+                query_service.list_runs(filters=RunListFilters(status=RUN_FAILED)).items[0].run_id,
+                failed.run_id,
+            )
+            self.assertEqual(
+                query_service.list_runs(
+                    filters=RunListFilters(created_after=datetime(2026, 10, 6, 12, 0, 30, tzinfo=UTC))
+                ).items[0].run_id,
+                failed.run_id,
+            )
+
+            detail = query_service.get_run_detail(failed.run_id)
+            self.assertIsNotNone(detail)
+            assert detail is not None
+            self.assertEqual([event.sequence for event in detail.events], [1, 2, 3])
+            self.assertEqual(detail.events[0].event_type, "run.created")
+            self.assertEqual(detail.events[-1].event_type, "run.failed")
+            failed_stage = next(stage for stage in detail.stages if stage.name == "research-work")
+            self.assertEqual(failed_stage.message, "token=[REDACTED]")
+
+    @unittest.skipUnless(SQLALCHEMY_AVAILABLE, "SQLAlchemy is installed in CI and production environments.")
+    def test_orchestrator_records_step_and_run_history_through_the_repository(self) -> None:
+        """Normal orchestration produces a durable timeline without runtime SQL branches."""
+        with TemporaryDirectory() as tmp:
+            engine = create_test_engine()
+            create_schema_for_tests(engine)
+            artifact_root = Path(tmp) / "artifacts"
+            repository = SqlAlchemyRunRepository(engine=engine, artifact_root=artifact_root)
+            state = Orchestrator(runs_dir=artifact_root, repository=repository).start("History timeline")
+
+            detail = SqlAlchemyRunQueryService(repository).get_run_detail(state["run_id"])
+            self.assertIsNotNone(detail)
+            assert detail is not None
+            event_types = [event.event_type for event in detail.events]
+            self.assertEqual(event_types[0], "run.created")
+            self.assertEqual(event_types[-1], "run.completed")
+            self.assertEqual(event_types.count("step.started"), len(WORKFLOW_STAGES))
+            self.assertEqual(event_types.count("step.completed"), len(WORKFLOW_STAGES))
 
     def test_cli_model_limits_are_validated_and_resume_can_reuse_them(self) -> None:
         parser = build_parser()

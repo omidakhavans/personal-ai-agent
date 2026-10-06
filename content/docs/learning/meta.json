@@ -1,4 +1,4 @@
 {
   "title": "Learning Guides",
-  "pages": ["index", "phase-2-build", "runtime-walkthrough", "research-work", "research-resources", "evidence-context", "write-blog", "review-blog", "approve-social", "write-linkedin", "write-x", "runtime-hardening", "code-quality", "phase-3-platform", "phase-4-control-plane"]
+  "pages": ["index", "phase-2-build", "runtime-walkthrough", "research-work", "research-resources", "evidence-context", "write-blog", "review-blog", "approve-social", "write-linkedin", "write-x", "runtime-hardening", "code-quality", "phase-3-platform", "durable-run-history", "phase-4-control-plane"]
 }
