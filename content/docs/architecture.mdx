@@ -9,6 +9,21 @@ Phase 1 used Codex as the runtime. Phase 2 makes the parts Codex handled implici
 Agent = runtime + model + tools + instructions + state
 ```
 
+## Phase 3 direction
+
+Phase 3 is planned, not implemented. It will turn the local runtime into a
+small modular monolith: typed workflow contracts and persistence ports first,
+then PostgreSQL, queryable history, an API, an operator control plane, guarded
+publishing integrations, jobs, and observability.
+
+The workflow rules remain independent of FastAPI, database libraries, model
+providers, queues, and publishing platforms. Those are adapters around the
+same evidence, review, and approval behavior. The static learning site will
+remain separate from the future authenticated operator control plane.
+
+Read [Phase 3 Platform Planning](./learning/phase-3-platform) for the learning
+view of the roadmap.
+
 The runtime coordinates stage order and persistence. The model interprets bounded inputs. Tools collect local evidence and explicitly supplied resources. Instructions define each stage's behavior. State records exactly what happened.
 
 ## Runtime shape

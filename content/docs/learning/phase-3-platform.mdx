@@ -1,0 +1,94 @@
+---
+title: Phase 3 Platform Planning
+description: Learn how the local runtime evolves without losing its evidence and approval rules.
+---
+
+Phase 2 is complete as a local runtime. Phase 3 is a deliberate plan to make
+that runtime durable and operable without turning it into a pile of unrelated
+services.
+
+## The starting point
+
+The current system is intentionally compact:
+
+```text
+CLI -> Orchestrator -> JSON state -> stage executors -> Markdown artifacts
+```
+
+It already protects important behavior: evidence is bounded before a model sees
+it, artifacts carry references forward, a review can block downstream work, and
+a human must explicitly approve social transformation.
+
+Files are not the problem. The limitation is that a file-backed local runtime
+cannot conveniently provide cross-run history, an API, an operator control
+plane, credential management, durable external publication records, or worker
+coordination.
+
+## The first move is a boundary, not a database
+
+Phase 3 begins with framework-independent run, stage, artifact, and event
+records plus repository and artifact ports:
+
+```text
+workflow policy -> ports -> file adapter or PostgreSQL adapter
+```
+
+The current filesystem behavior remains the first adapter. This lets the
+existing behavioral tests prove that a refactor preserved the content workflow
+before PostgreSQL, FastAPI, or a UI are introduced.
+
+Phase 3 raises the backend baseline to Python 3.12+ through an explicit,
+tested compatibility change. FastAPI, Pydantic v2, SQLAlchemy 2, and Alembic
+enter only when their API or database boundaries are ready.
+
+That is a useful agent-engineering lesson: model calls, tool calls, and human
+pauses are expensive or non-deterministic. Their safety rules should live in
+application/domain policy, not be copied into every new transport or storage
+layer.
+
+## What comes after the boundary
+
+1. PostgreSQL persistence for queryable runs, attempts, checkpoints, artifacts,
+   approvals, and append-only events.
+2. A FastAPI layer with typed request and response contracts; the CLI uses the
+   same application use cases.
+3. A separate operator control plane for run history, artifacts, and explicit
+   approvals. The learning site remains documentation only.
+4. Versioned model, prompt, and tool configuration plus encrypted credentials.
+5. A publisher port, starting with a human-controlled WordPress draft/preview.
+6. Social publishing, background jobs, and observability after the audit,
+   approval, and idempotency foundations are in place.
+
+## Keep the categories separate
+
+| Information | Intended responsibility |
+| --- | --- |
+| Run status, approvals, workflow history | relational operational data |
+| Variable resume details | bounded, versioned checkpoint payloads |
+| Research and content artifacts | controlled artifact storage |
+| Model/publish credentials | encrypted credential records |
+| Timings, trace IDs, diagnostics | logs, metrics, OpenTelemetry |
+
+A business audit event answers "who approved this exact article?" Telemetry
+answers "how long did the model call take?" Both are useful, but neither should
+pretend to be the other.
+
+## Explicit deferrals
+
+The plan does not add a vector database, pgvector, LangChain, LangGraph,
+microservices, or automatic publishing. There is no current retrieval use case
+for vector search, and the existing evidence/approval workflow is more valuable
+than infrastructure chosen by fashion.
+
+## Read next
+
+The repository plan includes detailed milestones, migration constraints, test
+expectations, and proposed architecture decisions:
+
+- [Roadmap](https://github.com/omidakhavans/personal-ai-agent/blob/main/docs/roadmap.md)
+- [Phase 3 Platform Plan](https://github.com/omidakhavans/personal-ai-agent/blob/main/docs/phase-3-platform-plan.md)
+- [Architecture Decision Records](https://github.com/omidakhavans/personal-ai-agent/tree/main/docs/adr)
+
+The first implementation task is **Typed Runtime And Persistence Boundary**. It
+does not add a database; it makes the later database adapter possible without
+weakening the workflow that already works.

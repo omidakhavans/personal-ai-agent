@@ -1,4 +1,4 @@
-# Phase 2 Learning Path
+# Personal AI Agent Learning Path
 
 This folder teaches the Personal AI Agent by following the code that exists in
 this repository. Read it in this order.
@@ -31,19 +31,23 @@ this repository. Read it in this order.
 12. [Code Quality And Static Analysis](code-quality.md)
    - Learn what linting, type checking, tests, grounding, and human review each
      prove, and where their guarantees stop.
+13. [Phase 3 Platform Planning](phase-3-platform-planning.md)
+   - Learn how the working local runtime can grow into a production-style agent
+     platform without losing its evidence and approval boundaries.
 
 The recommended way to learn is to read one guide, open the named files beside
 it, then run the focused tests. Change one small behavior only after you can
-predict which state, artifact, and test will change.
+predict which state, artifact, and test will change. Phase 3 is currently a
+plan: read its guide before implementing the first persistence-boundary task.
 
 ## Public Code References
 
 The learning guides may cite public source code directly. Prefer a
 repository-relative path, named function or class, and a commit-pinned GitHub
 line permalink when explaining a specific implementation. This makes the guide
-traceable to the code it teaches. It is safe because this repository is public;
-the prohibited material is private machine paths, generated local runs,
-credentials, and other local data.
+traceable to the code it teaches. A code reference does not expose the private
+runtime data that must stay out of documentation: machine paths, generated local
+runs, credentials, and other local data.
 
 ## Current Boundary
 

@@ -16,6 +16,27 @@ In Phase 1, Codex was the runtime. The Codex Skills described what each capabili
 
 Phase 2 makes those responsibilities explicit in application code.
 
+## Phase 3 Direction
+
+Phase 2 is complete as a local, file-backed runtime. Phase 3 is planned as an
+incremental evolution into a production-style modular monolith: typed domain
+contracts and persistence ports first, then a PostgreSQL adapter, execution
+history, API, operator control plane, configuration, controlled publishers,
+jobs, and observability.
+
+The important boundary is not "files versus database." It is workflow policy
+versus external details. The current `Orchestrator`, stage statuses, artifact
+contracts, review gate, and approval fingerprint describe behavior we want to
+preserve. Filesystem state, PostgreSQL, FastAPI, model providers, queues, and
+publishers should become adapters around that behavior.
+
+Phase 3 will keep the static documentation site separate from the future
+authenticated control plane. The site is for learning; the control plane is for
+operating runs and approving external actions.
+
+See [Phase 3 Platform Plan](phase-3-platform-plan.md) for milestones, data
+ownership, migration order, and the first implementation task.
+
 ## Agent vs Runtime
 
 The runtime itself is not the intelligence.

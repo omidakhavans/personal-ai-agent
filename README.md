@@ -1,6 +1,8 @@
 # Personal AI Agent
 
-Phase 2 of the Personal Applied AI Engineering project.
+Phase 2 of the Personal Applied AI Engineering project. Phase 2 is complete;
+the repository now also contains the plan for a deliberately incremental
+Phase 3 platform evolution.
 
 This repository starts rebuilding the Phase 1 Content Agent outside Codex. Phase 1 lives in `tech-content-agent` and acts as the behavioral reference implementation. This repo implements the first small piece of our own runtime.
 
@@ -9,6 +11,13 @@ This repository starts rebuilding the Phase 1 Content Agent outside Codex. Phase
 Phase 2 now has real, LLM-powered research, evidence-context, blog-writing,
 review, LinkedIn, and X stages. Social transformations require a recorded human
 approval after the evidence-aware blog review passes.
+
+Phase 3 is planned only. Its first task is to introduce typed runtime and
+persistence boundaries while retaining the working file-backed runtime. It does
+not yet add PostgreSQL, an API, an operator UI, background jobs, credentials,
+or publishing integrations. Read the [roadmap](docs/roadmap.md) and
+[Phase 3 platform plan](docs/phase-3-platform-plan.md) before starting that
+work.
 
 The runtime lifecycle was validated first with placeholder stages. It now has
 eight real stages, including an explicit human approval pause:
