@@ -18,11 +18,11 @@ Phase 2 makes those responsibilities explicit in application code.
 
 ## Phase 3 Direction
 
-Phase 2 is complete as a local, file-backed runtime. Phase 3 is planned as an
-incremental evolution into a production-style modular monolith: typed domain
-contracts and persistence ports first, then a PostgreSQL adapter, execution
-history, API, operator control plane, configuration, controlled publishers,
-jobs, and observability.
+Phase 2 is complete as a local, file-backed runtime. Phase 3.2 is also
+complete: typed domain contracts and persistence ports now wrap the existing
+filesystem behavior. The next incremental step is a PostgreSQL adapter, then
+execution history, API, operator control plane, configuration, controlled
+publishers, jobs, and observability.
 
 The important boundary is not "files versus database." It is workflow policy
 versus external details. The current `Orchestrator`, stage statuses, artifact

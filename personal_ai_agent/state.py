@@ -9,35 +9,25 @@ import tempfile
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal, TypeAlias, cast
-from uuid import uuid4
+from typing import Any, cast
 
+from .domain import (
+    RUN_AWAITING_APPROVAL,
+    RUN_BLOCKED,
+    RUN_COMPLETED,
+    RUN_FAILED,
+    RUN_RUNNING,
+    RUN_STATE_VERSION,
+    RUN_STATUSES,
+    RunSnapshot,
+    new_run_id,
+    utc_now,
+)
 from .stages import STAGE_PENDING, STAGE_SKIPPED, WORKFLOW_STAGES, StageStatus
 
-RunStatus: TypeAlias = Literal[
-    "pending", "running", "completed", "blocked", "failed", "awaiting_approval"
-]
-
-RUN_PENDING: RunStatus = "pending"
-RUN_RUNNING: RunStatus = "running"
-RUN_COMPLETED: RunStatus = "completed"
-RUN_BLOCKED: RunStatus = "blocked"
-RUN_FAILED: RunStatus = "failed"
-RUN_AWAITING_APPROVAL: RunStatus = "awaiting_approval"
-STATE_VERSION = 3
+STATE_VERSION = RUN_STATE_VERSION
 RUN_ID_PATTERN = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{8}$")
-RUN_STATUSES: frozenset[RunStatus] = frozenset(
-    {
-        RUN_PENDING,
-        RUN_RUNNING,
-        RUN_COMPLETED,
-        RUN_BLOCKED,
-        RUN_FAILED,
-        RUN_AWAITING_APPROVAL,
-    }
-)
 STAGE_STATUSES: frozenset[StageStatus] = frozenset(
     {
         "pending",
@@ -53,17 +43,6 @@ STAGE_STATUSES: frozenset[StageStatus] = frozenset(
 
 class StateError(RuntimeError):
     """A persisted run state or run identifier cannot be used safely."""
-
-
-def utc_now() -> str:
-    """Return the current timezone-aware timestamp for persisted audit fields."""
-    return datetime.now(UTC).isoformat()
-
-
-def new_run_id() -> str:
-    """Create a sortable, filesystem-safe identifier for a new workflow run."""
-    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    return f"{stamp}-{uuid4().hex[:8]}"
 
 
 @dataclass(frozen=True)
@@ -98,29 +77,10 @@ def initial_state(
     inputs: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Create the complete initial checkpoint for a valid workflow subject."""
-    if not subject.strip():
-        raise StateError("Run subject must not be empty.")
-    return {
-        "state_version": STATE_VERSION,
-        "run_id": run_id,
-        "subject": subject,
-        "inputs": inputs or {},
-        "status": RUN_PENDING,
-        "current_stage": WORKFLOW_STAGES[0].name,
-        "created_at": utc_now(),
-        "updated_at": utc_now(),
-        "stages": {
-            stage.name: {
-                "status": STAGE_PENDING,
-                "artifact": stage.artifact,
-                "message": "",
-                "attempts": 0,
-                "started_at": None,
-                "finished_at": None,
-            }
-            for stage in WORKFLOW_STAGES
-        },
-    }
+    try:
+        return RunSnapshot.create(run_id=run_id, subject=subject, inputs=inputs).to_dict()
+    except ValueError as exc:
+        raise StateError(str(exc)) from exc
 
 
 def read_state(state_path: Path) -> dict[str, Any]:

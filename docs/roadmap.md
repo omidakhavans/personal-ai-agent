@@ -74,7 +74,7 @@ implementation.
 
 ## Phase 3: Production-Style Agent Platform
 
-Status: Planned. No Phase 3 runtime implementation has started.
+Status: In progress. Milestone 3.2 is complete.
 
 ### Goal
 
@@ -129,15 +129,26 @@ behavior.
 
 #### 3.2 Typed Runtime And Persistence Boundary
 
-Status: Next implementation task.
+Status: Complete.
 
 Introduce explicit domain records and repository ports around the current run
 state, then make the existing file-backed implementation an adapter. Preserve
 the CLI, filesystem artifacts, and current run behavior while tests prove the
 new boundary is behaviorally equivalent.
 
-Why first: PostgreSQL should replace an adapter, not become entangled with the
-orchestrator's current dictionaries and filesystem paths.
+Implemented:
+
+- framework-independent `RunSnapshot`, `StageSnapshot`, and artifact contracts;
+- repository and artifact-store ports;
+- file-backed adapters that retain atomic JSON checkpoints, locks, private
+  resume configuration, and path-constrained Markdown artifacts;
+- a port-backed `Orchestrator` with unchanged CLI outputs and workflow rules;
+- Python 3.12+ package and CI baseline; and
+- characterization tests for snapshot compatibility, file adapter round trips,
+  and artifact confinement, alongside the existing lifecycle tests.
+
+Why first: PostgreSQL can now replace an adapter rather than becoming entangled
+with orchestration dictionaries and filesystem paths.
 
 #### 3.3 PostgreSQL Persistence Foundation
 
@@ -226,26 +237,26 @@ backup/recovery guidance, deployment checks, and production operations
 documentation. Add pgvector only if a concrete retrieval feature needs semantic
 search; it is not a default platform dependency.
 
-## First Phase 3 Implementation Task
+## Next Phase 3 Implementation Task
 
-**Implement Milestone 3.2: a typed runtime domain and persistence boundary,
-initially backed by the current filesystem state.**
+**Implement Milestone 3.3: a PostgreSQL persistence adapter and migration
+foundation.**
 
 The first pull request should be intentionally narrow:
 
-- define typed run, stage, artifact, and event contracts in a framework-free
-  domain package;
-- introduce a `RunRepository` port and a file-backed adapter that preserves the
-  current `state.json`, private resume configuration, locking, and artifact
-  checks;
-- change the orchestrator to depend on the port rather than state-file helper
-  functions directly;
-- retain the existing CLI behavior and artifact names; and
-- add characterization tests proving the same successful, blocked, failed,
-  approval-paused, and resumed runs still behave the same.
+- introduce SQLAlchemy 2 mappings, Alembic configuration, and PostgreSQL test
+  infrastructure;
+- implement the existing repository contract without importing ORM entities
+  into domain or application code;
+- create migrations only for runs, stage attempts/checkpoints, artifact
+  metadata, approvals, and append-only events;
+- keep the file adapter as the active compatibility path; and
+- run the same repository contract suite against the file and PostgreSQL
+  implementations.
 
-Do not add FastAPI, PostgreSQL, Redis, or a UI in that first task. Their future
-adapters will have a clean, tested boundary to implement.
+Do not add FastAPI, Redis, a UI, provider configuration, or publishers in that
+task. The database adapter should be proved before exposing it through another
+interface.
 
 ## Future-Session Handoff
 
@@ -258,7 +269,7 @@ Before beginning Phase 3 implementation, read in this order:
 5. `personal_ai_agent/runtime.py`, `state.py`, and `stages.py`
 6. `tests/test_runtime.py`
 
-Start with the Milestone 3.2 task above. Preserve behavior first, run the
+Start with the Milestone 3.3 task above. Preserve behavior first, run the
 existing checks, update the architecture and learning guides with each material
 change, and do not introduce a Phase 3 service or publishing integration before
 the relevant milestone.

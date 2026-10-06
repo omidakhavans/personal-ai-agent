@@ -3,9 +3,9 @@
 ## Scope
 
 Phase 3 evolves the completed Phase 2 local runtime into a small,
-production-style agent platform. This document is a plan, not implementation.
-It does not change the Python package, its dependencies, or its runtime
-behavior.
+production-style agent platform. Milestone 3.2 is implemented; the remaining
+milestones are a plan. It does not include database, API, worker, or publisher
+implementation yet.
 
 The Phase 3 backend target is Python 3.12+ with FastAPI, Pydantic v2,
 SQLAlchemy 2, and Alembic introduced at the boundaries that need them.
@@ -224,6 +224,8 @@ learning system while a platform capability is being added.
 
 ### 3.2 Typed Runtime And Persistence Boundary
 
+Status: Complete.
+
 **Objective:** decouple workflow logic from JSON files without changing user
 visible behavior.
 
@@ -249,11 +251,13 @@ private-input handling.
 interrupted stage, tampered artifacts, approval fingerprints, and file-adapter
 round trips.
 
-**Done means:** the CLI's existing commands pass their current tests and
-`Orchestrator` has no knowledge of a `state.json` path.
+**Done means:** complete. The CLI's existing commands retain their state and
+artifact behavior, and `Orchestrator` checkpoints through a `RunRepository`
+instead of knowing a `state.json` path.
 
-**Small PRs:** (1) typed records and read-only adapters; (2) port-backed
-orchestrator; (3) cleanup after behavioral equivalence is proved.
+**Delivered:** typed run/stage/artifact records, a future event contract,
+repository and artifact-store ports, filesystem adapters, Python 3.12+ CI, and
+42 behavioral/contract tests.
 
 **Learning objective:** hexagonal architecture is a way to protect business
 rules from external details, not a rule that every class needs an interface.

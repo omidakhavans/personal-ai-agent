@@ -104,15 +104,29 @@ Generating a draft is reversible. Publishing is not. The workflow therefore
 keeps review, approval, and publication as separate actions. A publisher is not
 allowed to infer permission merely because an article exists.
 
+## What Was Implemented In Phase 3.2
+
+The first implementation task is complete. The new `domain.py` contains typed
+run, stage, and artifact snapshots. `persistence.py` defines the repository and
+artifact-store ports plus filesystem adapters that continue to use the proven
+JSON state, lock, private-config, and Markdown artifact behavior.
+
+`Orchestrator` now depends on those ports. It still returns the same shareable
+state dictionary to the CLI, and stage executors still receive their workspace
+directory, so this was a boundary refactor rather than a workflow rewrite.
+
+The next milestone is PostgreSQL persistence. It must implement the same
+repository contract before the CLI, API, or UI is changed.
+
 ## First Exercise In Phase 3
 
-The first implementation task is **Typed Runtime And Persistence Boundary**.
-Its goal is not to add a database. Its goal is to make it possible to swap the
-file implementation for a database without changing the workflow's rules.
+The first implementation task was **Typed Runtime And Persistence Boundary**.
+Its goal was not to add a database. Its goal was to make it possible to swap
+the file implementation for a database without changing workflow rules.
 
 Before implementing it, answer these questions from the current code:
 
-1. Which `state.py` functions does `Orchestrator` call directly?
+1. Which filesystem functions now live behind `FileRunRepository`?
 2. Which fields in `state.json` represent workflow policy rather than storage?
 3. Which artifacts must survive a resume, and why?
 4. Which existing tests describe behavior that a file and PostgreSQL adapter

@@ -11,6 +11,7 @@ from pathlib import Path
 from .approval import SocialApprovalExecutor
 from .evidence_context import EvidenceContextExecutor, EvidenceContextSettings
 from .model_client import OpenAIResponsesClient
+from .persistence import FileRunRepository
 from .privacy import reference_label, repository_label
 from .research_resources import ResearchResourcesSettings, ResourceResearchExecutor
 from .research_work import ResearchWorkExecutor, ResearchWorkSettings
@@ -22,7 +23,7 @@ from .social_writing import (
     XWriterExecutor,
 )
 from .stages import RoutedStageExecutor
-from .state import StateError, paths_for_run, read_private_config, read_state
+from .state import StateError
 from .write_blog import BlogWriterExecutor, BlogWriterSettings
 
 DEFAULT_RUNS_DIR = Path("runs")
@@ -146,6 +147,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     runs_dir = Path(args.runs_dir)
+    run_repository = FileRunRepository(runs_dir)
 
     try:
         if args.command == "run":
@@ -172,9 +174,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
 
         if args.command == "resume":
-            read_state(paths_for_run(runs_dir, args.run_id).state_path)
+            workspace = run_repository.open(args.run_id)
+            run_repository.load(workspace)
             try:
-                private_config = read_private_config(runs_dir, args.run_id)
+                private_config = run_repository.load_private_config(workspace)
             except StateError:
                 if not args.repository or not args.model:
                     raise
@@ -196,13 +199,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 executor=build_content_executor(
                     Path(repository), resources, model, model_options
                 ),
+                repository=run_repository,
             ).resume(args.run_id)
             print_run_result(state, output_format=args.output_format)
             return 0
 
         if args.command == "show-state":
-            paths = paths_for_run(runs_dir, args.run_id)
-            print(json.dumps(read_state(paths.state_path), indent=2, sort_keys=True))
+            snapshot = run_repository.load(run_repository.open(args.run_id))
+            print(json.dumps(snapshot.to_dict(), indent=2, sort_keys=True))
             return 0
 
         if args.command == "validate":
@@ -211,8 +215,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
 
         if args.command == "approve-social":
+            workspace = run_repository.open(args.run_id)
             try:
-                private_config = read_private_config(runs_dir, args.run_id)
+                private_config = run_repository.load_private_config(workspace)
             except StateError:
                 if not args.repository or not args.model:
                     raise
@@ -232,6 +237,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 executor=build_content_executor(
                     Path(repository), resources, model, model_options
                 ),
+                repository=run_repository,
             ).approve_social(args.run_id, args.notes)
             print_run_result(state, output_format=args.output_format)
             return 0

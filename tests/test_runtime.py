@@ -11,6 +11,7 @@ from unittest.mock import patch
 from personal_ai_agent.approval import SocialApprovalExecutor
 from personal_ai_agent.cli import build_parser, model_options_from_args
 from personal_ai_agent.content_artifacts import collect_article_inputs
+from personal_ai_agent.domain import RunSnapshot
 from personal_ai_agent.evidence_context import (
     EvidenceContextExecutor,
     EvidenceContextSettings,
@@ -18,6 +19,7 @@ from personal_ai_agent.evidence_context import (
     validate_context_brief,
 )
 from personal_ai_agent.model_client import OpenAIResponsesClient
+from personal_ai_agent.persistence import FileArtifactStore, FileRunRepository, RunWorkspace
 from personal_ai_agent.research_resources import (
     ResearchResourcesSettings,
     ResourceReadError,
@@ -292,6 +294,47 @@ class RuntimeTests(unittest.TestCase):
     def test_empty_subject_is_rejected_before_state_is_created(self) -> None:
         with self.assertRaisesRegex(StateError, "subject"):
             initial_state("20261002-105024-1234abcd", "   ")
+
+    def test_typed_snapshot_preserves_the_existing_shareable_state_contract(self) -> None:
+        legacy_state = initial_state(
+            "20261002-105024-1234abcd",
+            "Typed state boundary",
+            {"model": "test-model"},
+        )
+
+        snapshot = RunSnapshot.from_dict(legacy_state)
+
+        self.assertEqual(snapshot.to_dict(), legacy_state)
+
+    def test_file_repository_round_trips_a_typed_snapshot_and_private_config(self) -> None:
+        with TemporaryDirectory() as tmp:
+            repository = FileRunRepository(Path(tmp) / "runs")
+            snapshot = RunSnapshot.create(
+                run_id="20261002-105024-1234abcd",
+                subject="Repository boundary",
+                inputs={"repository": "local repository: example"},
+            )
+            workspace = repository.create(snapshot)
+            config = {
+                "repository": "local-machine/project",
+                "resources": [],
+                "model": "test-model",
+            }
+
+            with repository.lock(workspace):
+                repository.save(workspace, snapshot)
+                repository.save_private_config(workspace, config)
+                restored = repository.load(workspace)
+
+            self.assertEqual(restored.to_dict(), read_state(workspace.run_dir / "state.json"))
+            self.assertEqual(repository.load_private_config(workspace), config)
+
+    def test_file_artifact_store_rejects_paths_outside_a_run_workspace(self) -> None:
+        with TemporaryDirectory() as tmp:
+            workspace = RunWorkspace(run_id="example", run_dir=Path(tmp))
+
+            with self.assertRaisesRegex(ValueError, "outside"):
+                FileArtifactStore().write_text(workspace, "../outside.md", "unsafe")
 
     def test_cli_model_limits_are_validated_and_resume_can_reuse_them(self) -> None:
         parser = build_parser()

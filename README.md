@@ -12,12 +12,12 @@ Phase 2 now has real, LLM-powered research, evidence-context, blog-writing,
 review, LinkedIn, and X stages. Social transformations require a recorded human
 approval after the evidence-aware blog review passes.
 
-Phase 3 is planned only. Its first task is to introduce typed runtime and
-persistence boundaries while retaining the working file-backed runtime. It does
-not yet add PostgreSQL, an API, an operator UI, background jobs, credentials,
-or publishing integrations. Read the [roadmap](docs/roadmap.md) and
-[Phase 3 platform plan](docs/phase-3-platform-plan.md) before starting that
-work.
+Phase 3.2 is complete: the runtime now uses typed run and stage snapshots plus
+repository and artifact ports, while the original JSON/filesystem implementation
+remains the active adapter. It does not yet add PostgreSQL, an API, an operator
+UI, background jobs, credentials, or publishing integrations. The next task is
+the PostgreSQL persistence adapter. Read the [roadmap](docs/roadmap.md) and
+[Phase 3 platform plan](docs/phase-3-platform-plan.md) before starting it.
 
 The runtime lifecycle was validated first with placeholder stages. It now has
 eight real stages, including an explicit human approval pause:

@@ -11,10 +11,10 @@ Agent = runtime + model + tools + instructions + state
 
 ## Phase 3 direction
 
-Phase 3 is planned, not implemented. It will turn the local runtime into a
-small modular monolith: typed workflow contracts and persistence ports first,
-then PostgreSQL, queryable history, an API, an operator control plane, guarded
-publishing integrations, jobs, and observability.
+Phase 3.2 is implemented: typed workflow contracts and persistence ports now
+wrap the local filesystem runtime. The next step is PostgreSQL, followed by
+queryable history, an API, an operator control plane, guarded publishing
+integrations, jobs, and observability.
 
 The workflow rules remain independent of FastAPI, database libraries, model
 providers, queues, and publishing platforms. Those are adapters around the

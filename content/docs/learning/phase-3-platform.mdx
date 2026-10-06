@@ -26,16 +26,16 @@ coordination.
 
 ## The first move is a boundary, not a database
 
-Phase 3 begins with framework-independent run, stage, artifact, and event
-records plus repository and artifact ports:
+Phase 3.2 implemented framework-independent run, stage, artifact, and future
+event records plus repository and artifact ports:
 
 ```text
 workflow policy -> ports -> file adapter or PostgreSQL adapter
 ```
 
-The current filesystem behavior remains the first adapter. This lets the
-existing behavioral tests prove that a refactor preserved the content workflow
-before PostgreSQL, FastAPI, or a UI are introduced.
+The current filesystem behavior remains the active first adapter. The existing
+behavioral tests prove that the refactor preserved the content workflow before
+PostgreSQL, FastAPI, or a UI are introduced.
 
 Phase 3 raises the backend baseline to Python 3.12+ through an explicit,
 tested compatibility change. FastAPI, Pydantic v2, SQLAlchemy 2, and Alembic
@@ -89,6 +89,6 @@ expectations, and proposed architecture decisions:
 - [Phase 3 Platform Plan](https://github.com/omidakhavans/personal-ai-agent/blob/main/docs/phase-3-platform-plan.md)
 - [Architecture Decision Records](https://github.com/omidakhavans/personal-ai-agent/tree/main/docs/adr)
 
-The first implementation task is **Typed Runtime And Persistence Boundary**. It
-does not add a database; it makes the later database adapter possible without
+The next implementation task is **PostgreSQL Persistence Foundation**. It will
+implement the same repository contract with SQLAlchemy 2 and Alembic without
 weakening the workflow that already works.

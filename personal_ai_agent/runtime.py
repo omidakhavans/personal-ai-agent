@@ -5,6 +5,24 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .domain import (
+    ArtifactReference,
+    RUN_AWAITING_APPROVAL,
+    RUN_BLOCKED,
+    RUN_COMPLETED,
+    RUN_FAILED,
+    RUN_RUNNING,
+    RunSnapshot,
+    new_run_id,
+    utc_now,
+)
+from .persistence import (
+    ArtifactStore,
+    FileArtifactStore,
+    FileRunRepository,
+    RunRepository,
+    RunWorkspace,
+)
 from .stages import (
     STAGE_AWAITING_APPROVAL,
     STAGE_BLOCKED,
@@ -18,22 +36,7 @@ from .stages import (
     PlaceholderStageExecutor,
     StageExecutor,
 )
-from .state import (
-    RUN_AWAITING_APPROVAL,
-    RUN_BLOCKED,
-    RUN_COMPLETED,
-    RUN_FAILED,
-    RUN_RUNNING,
-    StateError,
-    initial_state,
-    new_run_id,
-    paths_for_run,
-    read_state,
-    run_lock,
-    utc_now,
-    write_private_config,
-    write_state,
-)
+from .state import StateError
 
 
 class RuntimeErrorWithContext(RuntimeError):
@@ -48,46 +51,52 @@ class Orchestrator:
         *,
         runs_dir: Path,
         executor: StageExecutor | None = None,
+        repository: RunRepository | None = None,
+        artifacts: ArtifactStore | None = None,
     ) -> None:
-        """Set the run storage location and stage executor used for advancement."""
+        """Set capability and persistence adapters for one workflow application."""
         self.runs_dir = runs_dir
         self.executor = executor or PlaceholderStageExecutor()
+        self.repository = repository or FileRunRepository(runs_dir)
+        self.artifacts = artifacts or FileArtifactStore()
 
     def start(
         self,
         subject: str,
         *,
         inputs: dict[str, Any] | None = None,
-        private_inputs: dict[str, Any] | None = None,
+        private_inputs: dict[str, object] | None = None,
     ) -> dict[str, Any]:
         """Create a checkpointed run and advance it until it stops or completes."""
-        run_id = new_run_id()
-        paths = paths_for_run(self.runs_dir, run_id)
-        paths.run_dir.mkdir(parents=True, exist_ok=False)
-        state = initial_state(run_id=run_id, subject=subject, inputs=inputs)
         try:
-            with run_lock(paths.run_dir):
-                write_state(paths.state_path, state)
+            snapshot = RunSnapshot.create(
+                run_id=new_run_id(),
+                subject=subject,
+                inputs=inputs,
+            )
+            workspace = self.repository.create(snapshot)
+            with self.repository.lock(workspace):
+                self.repository.save(workspace, snapshot)
                 if private_inputs is not None:
-                    write_private_config(self.runs_dir, run_id, private_inputs)
-                return self._advance(state=state, state_path=paths.state_path, run_dir=paths.run_dir)
-        except StateError as exc:
+                    self.repository.save_private_config(workspace, private_inputs)
+                return self._advance(snapshot=snapshot, workspace=workspace)
+        except (StateError, ValueError) as exc:
             raise RuntimeErrorWithContext(str(exc)) from exc
 
     def resume(self, run_id: str) -> dict[str, Any]:
         """Continue an unfinished run after validating its prior artifacts."""
         try:
-            paths = paths_for_run(self.runs_dir, run_id)
-            with run_lock(paths.run_dir):
-                state = read_state(paths.state_path)
+            workspace = self.repository.open(run_id)
+            with self.repository.lock(workspace):
+                snapshot = self.repository.load(workspace)
 
-                if state["status"] in {RUN_COMPLETED, RUN_BLOCKED, RUN_FAILED, RUN_AWAITING_APPROVAL}:
-                    return state
+                if snapshot.status in {RUN_COMPLETED, RUN_BLOCKED, RUN_FAILED, RUN_AWAITING_APPROVAL}:
+                    return snapshot.to_dict()
 
-                self._verify_prior_artifacts(state, paths.run_dir)
-                self._reset_interrupted_stage(state)
-                return self._advance(state=state, state_path=paths.state_path, run_dir=paths.run_dir)
-        except StateError as exc:
+                self._verify_prior_artifacts(snapshot, workspace)
+                self._reset_interrupted_stage(snapshot)
+                return self._advance(snapshot=snapshot, workspace=workspace)
+        except (StateError, ValueError) as exc:
             raise RuntimeErrorWithContext(str(exc)) from exc
 
     def validate_run(self, run_id: str) -> dict[str, Any]:
@@ -98,33 +107,33 @@ class Orchestrator:
         model-backed workflow or spending tokens.
         """
         try:
-            paths = paths_for_run(self.runs_dir, run_id)
-            with run_lock(paths.run_dir):
-                state = read_state(paths.state_path)
-                self._verify_prior_artifacts(state, paths.run_dir)
-                return state
-        except StateError as exc:
+            workspace = self.repository.open(run_id)
+            with self.repository.lock(workspace):
+                snapshot = self.repository.load(workspace)
+                self._verify_prior_artifacts(snapshot, workspace)
+                return snapshot.to_dict()
+        except (StateError, ValueError) as exc:
             raise RuntimeErrorWithContext(str(exc)) from exc
 
-    def _reset_interrupted_stage(self, state: dict[str, Any]) -> None:
+    def _reset_interrupted_stage(self, snapshot: RunSnapshot) -> None:
         """Make one interrupted running stage eligible for an explicit retry."""
         for stage in WORKFLOW_STAGES:
-            stage_state = state["stages"][stage.name]
-            if stage_state["status"] == STAGE_RUNNING:
-                stage_state["status"] = STAGE_PENDING
-                stage_state["message"] = "Interrupted attempt will be retried on explicit resume."
-                stage_state["finished_at"] = None
+            stage_state = snapshot.stages[stage.name]
+            if stage_state.status == STAGE_RUNNING:
+                stage_state.status = STAGE_PENDING
+                stage_state.message = "Interrupted attempt will be retried on explicit resume."
+                stage_state.finished_at = None
                 return
 
     def approve_social(self, run_id: str, notes: str | None = None) -> dict[str, Any]:
         """Record an explicit owner decision, then continue the social-draft stages."""
         try:
-            paths = paths_for_run(self.runs_dir, run_id)
-            with run_lock(paths.run_dir):
-                state = read_state(paths.state_path)
+            workspace = self.repository.open(run_id)
+            with self.repository.lock(workspace):
+                snapshot = self.repository.load(workspace)
                 stage_name = "approve-social"
-                stage_state = state["stages"][stage_name]
-                if state["status"] != RUN_AWAITING_APPROVAL or stage_state["status"] != STAGE_AWAITING_APPROVAL:
+                stage_state = snapshot.stages[stage_name]
+                if snapshot.status != RUN_AWAITING_APPROVAL or stage_state.status != STAGE_AWAITING_APPROVAL:
                     raise RuntimeErrorWithContext("This run is not awaiting social-transformation approval.")
                 from .approval import render_approved_social_transformations
                 from .content_artifacts import (
@@ -133,164 +142,162 @@ class Orchestrator:
                 )
 
                 try:
-                    article = collect_reviewed_article_inputs(paths.run_dir).article
+                    article = collect_reviewed_article_inputs(workspace.run_dir).article
                 except ArtifactInputError as exc:
                     raise RuntimeErrorWithContext(
                         f"Social approval cannot use the current artifacts: {exc}"
                     ) from exc
 
-                (paths.run_dir / "approval.md").write_text(
+                self.artifacts.write_text(
+                    workspace,
+                    "approval.md",
                     render_approved_social_transformations(
-                        state["subject"], notes, article.blog_sha256
+                        snapshot.subject,
+                        notes,
+                        article.blog_sha256,
                     ),
-                    encoding="utf-8",
                 )
-                stage_state["status"] = STAGE_COMPLETED
-                stage_state["message"] = "Social transformation approved explicitly by the run owner."
-                stage_state["finished_at"] = utc_now()
-                state["status"] = RUN_RUNNING
-                write_state(paths.state_path, state)
-                return self._advance(state=state, state_path=paths.state_path, run_dir=paths.run_dir)
-        except StateError as exc:
+                stage_state.status = STAGE_COMPLETED
+                stage_state.message = "Social transformation approved explicitly by the run owner."
+                stage_state.finished_at = utc_now()
+                snapshot.status = RUN_RUNNING
+                self.repository.save(workspace, snapshot)
+                return self._advance(snapshot=snapshot, workspace=workspace)
+        except (StateError, ValueError) as exc:
             raise RuntimeErrorWithContext(str(exc)) from exc
 
-    def _advance(
-        self,
-        *,
-        state: dict[str, Any],
-        state_path: Path,
-        run_dir: Path,
-    ) -> dict[str, Any]:
+    def _advance(self, *, snapshot: RunSnapshot, workspace: RunWorkspace) -> dict[str, Any]:
         """Advance pending stages in order until a terminal workflow outcome."""
-        state["status"] = RUN_RUNNING
-        write_state(state_path, state)
+        snapshot.status = RUN_RUNNING
+        self.repository.save(workspace, snapshot)
 
         for stage in WORKFLOW_STAGES:
-            stage_state = state["stages"][stage.name]
-            status = stage_state["status"]
+            stage_state = snapshot.stages[stage.name]
+            status = stage_state.status
 
             if status in {STAGE_COMPLETED, STAGE_SKIPPED}:
                 continue
             if status == STAGE_BLOCKED:
-                state["status"] = RUN_BLOCKED
-                state["current_stage"] = stage.name
-                write_state(state_path, state)
-                return state
+                snapshot.status = RUN_BLOCKED
+                snapshot.current_stage = stage.name
+                self.repository.save(workspace, snapshot)
+                return snapshot.to_dict()
             if status == STAGE_FAILED:
-                state["status"] = RUN_FAILED
-                state["current_stage"] = stage.name
-                write_state(state_path, state)
-                return state
+                snapshot.status = RUN_FAILED
+                snapshot.current_stage = stage.name
+                self.repository.save(workspace, snapshot)
+                return snapshot.to_dict()
             if status != STAGE_PENDING:
                 raise RuntimeErrorWithContext(
                     f"Cannot resume stage {stage.name!r} from status {status!r}."
                 )
 
-            state["current_stage"] = stage.name
-            stage_state["status"] = STAGE_RUNNING
-            stage_state["attempts"] += 1
-            stage_state["started_at"] = utc_now()
-            write_state(state_path, state)
+            snapshot.current_stage = stage.name
+            stage_state.status = STAGE_RUNNING
+            stage_state.attempts += 1
+            stage_state.started_at = utc_now()
+            self.repository.save(workspace, snapshot)
 
             try:
                 result = self.executor.execute(
                     stage=stage,
-                    subject=state["subject"],
-                    run_dir=run_dir,
+                    subject=snapshot.subject,
+                    run_dir=workspace.run_dir,
                 )
             except Exception as exc:  # pragma: no cover - exact exception is stage-specific
-                stage_state["status"] = STAGE_FAILED
-                stage_state["message"] = f"{type(exc).__name__}: {exc}"
-                stage_state["finished_at"] = utc_now()
-                state["status"] = RUN_FAILED
-                write_state(state_path, state)
-                return state
+                stage_state.status = STAGE_FAILED
+                stage_state.message = f"{type(exc).__name__}: {exc}"
+                stage_state.finished_at = utc_now()
+                snapshot.status = RUN_FAILED
+                self.repository.save(workspace, snapshot)
+                return snapshot.to_dict()
 
             if result.status not in TERMINAL_STAGE_STATUSES:
-                stage_state["status"] = STAGE_FAILED
-                stage_state["message"] = f"Invalid stage result status: {result.status}"
-                stage_state["finished_at"] = utc_now()
-                state["status"] = RUN_FAILED
-                write_state(state_path, state)
-                return state
+                stage_state.status = STAGE_FAILED
+                stage_state.message = f"Invalid stage result status: {result.status}"
+                stage_state.finished_at = utc_now()
+                snapshot.status = RUN_FAILED
+                self.repository.save(workspace, snapshot)
+                return snapshot.to_dict()
 
             artifact_error = self._validate_stage_artifact(
                 status=result.status,
                 artifact=result.artifact,
                 stage_name=stage.name,
                 expected_artifact=stage.artifact,
-                run_dir=run_dir,
+                workspace=workspace,
             )
             if artifact_error:
-                stage_state["status"] = STAGE_FAILED
-                stage_state["message"] = artifact_error
-                stage_state["finished_at"] = utc_now()
-                state["status"] = RUN_FAILED
-                write_state(state_path, state)
-                return state
+                stage_state.status = STAGE_FAILED
+                stage_state.message = artifact_error
+                stage_state.finished_at = utc_now()
+                snapshot.status = RUN_FAILED
+                self.repository.save(workspace, snapshot)
+                return snapshot.to_dict()
 
-            stage_state["status"] = result.status
-            stage_state["message"] = result.message
-            stage_state["finished_at"] = utc_now()
+            stage_state.status = result.status
+            stage_state.message = result.message
+            stage_state.finished_at = utc_now()
             if result.artifact:
-                stage_state["artifact"] = result.artifact
-            write_state(state_path, state)
+                stage_state.artifact = ArtifactReference(result.artifact)
+            self.repository.save(workspace, snapshot)
 
             if result.status == STAGE_BLOCKED:
-                state["status"] = RUN_BLOCKED
-                write_state(state_path, state)
-                return state
+                snapshot.status = RUN_BLOCKED
+                self.repository.save(workspace, snapshot)
+                return snapshot.to_dict()
             if result.status == STAGE_AWAITING_APPROVAL:
-                state["status"] = RUN_AWAITING_APPROVAL
-                write_state(state_path, state)
-                return state
+                snapshot.status = RUN_AWAITING_APPROVAL
+                self.repository.save(workspace, snapshot)
+                return snapshot.to_dict()
             if result.status == STAGE_FAILED:
-                state["status"] = RUN_FAILED
-                write_state(state_path, state)
-                return state
+                snapshot.status = RUN_FAILED
+                self.repository.save(workspace, snapshot)
+                return snapshot.to_dict()
 
-        state["status"] = RUN_COMPLETED
-        state["current_stage"] = None
-        write_state(state_path, state)
-        return state
+        snapshot.status = RUN_COMPLETED
+        snapshot.current_stage = None
+        self.repository.save(workspace, snapshot)
+        return snapshot.to_dict()
 
-    @staticmethod
     def _validate_stage_artifact(
+        self,
         *,
         status: str,
         artifact: str | None,
         stage_name: str,
         expected_artifact: str,
-        run_dir: Path,
+        workspace: RunWorkspace,
     ) -> str | None:
         """Return an error when a reported artifact violates the stage contract."""
         if status == STAGE_FAILED:
             return None
         if artifact != expected_artifact:
             return f"Stage {stage_name!r} did not return its expected artifact."
-        artifact_path = (run_dir / expected_artifact).resolve()
-        if artifact_path.parent != run_dir.resolve():
+        try:
+            error = self.artifacts.validation_error(workspace, expected_artifact)
+        except ValueError:
             return f"Stage {stage_name!r} produced an unsafe artifact path."
-        if not artifact_path.is_file() or artifact_path.stat().st_size == 0:
-            return f"Stage {stage_name!r} reported success without a readable artifact."
+        if error:
+            return f"Stage {stage_name!r} {error}"
         return None
 
-    def _verify_prior_artifacts(self, state: dict[str, Any], run_dir: Path) -> None:
+    def _verify_prior_artifacts(self, snapshot: RunSnapshot, workspace: RunWorkspace) -> None:
         """Ensure saved terminal stages still have the artifacts later stages trust."""
         for stage in WORKFLOW_STAGES:
-            stage_state = state["stages"][stage.name]
-            if stage_state["status"] in {
+            stage_state = snapshot.stages[stage.name]
+            if stage_state.status in {
                 STAGE_COMPLETED,
                 STAGE_SKIPPED,
                 STAGE_BLOCKED,
                 STAGE_AWAITING_APPROVAL,
             }:
                 error = self._validate_stage_artifact(
-                    status=stage_state["status"],
-                    artifact=stage_state["artifact"],
+                    status=stage_state.status,
+                    artifact=stage_state.artifact.name,
                     stage_name=stage.name,
                     expected_artifact=stage.artifact,
-                    run_dir=run_dir,
+                    workspace=workspace,
                 )
                 if error:
                     raise RuntimeErrorWithContext(f"Cannot resume: {error}")
