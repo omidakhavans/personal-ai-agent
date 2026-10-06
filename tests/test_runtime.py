@@ -19,7 +19,11 @@ from personal_ai_agent.evidence_context import (
     validate_context_brief,
 )
 from personal_ai_agent.model_client import OpenAIResponsesClient
-from personal_ai_agent.persistence import FileArtifactStore, FileRunRepository, RunWorkspace
+from personal_ai_agent.persistence import (
+    FileArtifactStore,
+    FileRunRepository,
+    RunWorkspace,
+)
 from personal_ai_agent.research_resources import (
     ResearchResourcesSettings,
     ResourceReadError,
@@ -75,6 +79,17 @@ from personal_ai_agent.write_blog import (
     collect_blog_inputs,
     validate_blog_draft,
 )
+
+try:
+    from personal_ai_agent.postgres import (
+        SqlAlchemyRunRepository,
+        create_schema_for_tests,
+        create_test_engine,
+    )
+except ModuleNotFoundError:
+    SQLALCHEMY_AVAILABLE = False
+else:
+    SQLALCHEMY_AVAILABLE = True
 
 
 class RuntimeTests(unittest.TestCase):
@@ -335,6 +350,38 @@ class RuntimeTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "outside"):
                 FileArtifactStore().write_text(workspace, "../outside.md", "unsafe")
+
+    @unittest.skipUnless(SQLALCHEMY_AVAILABLE, "SQLAlchemy is installed in CI and production environments.")
+    def test_sqlalchemy_repository_preserves_the_run_snapshot_contract(self) -> None:
+        """The relational adapter must round-trip the same domain record as files."""
+        with TemporaryDirectory() as tmp:
+            engine = create_test_engine()
+            create_schema_for_tests(engine)
+            repository = SqlAlchemyRunRepository(
+                engine=engine,
+                artifact_root=Path(tmp) / "artifacts",
+                private_config_root=Path(tmp) / "private-config",
+            )
+            snapshot = RunSnapshot.create(
+                run_id="20261006-120000-1234abcd",
+                subject="Relational checkpoint contract",
+                inputs={"model": "test-model"},
+            )
+
+            workspace = repository.create(snapshot)
+            private_config = {
+                "repository": "/path/to/project",
+                "resources": [],
+                "model": "test-model",
+            }
+            with repository.lock(workspace):
+                repository.save(workspace, snapshot)
+                repository.save_private_config(workspace, private_config)
+                restored = repository.load(workspace)
+
+            self.assertEqual(restored.to_dict(), snapshot.to_dict())
+            self.assertEqual(repository.load_private_config(workspace), private_config)
+            self.assertTrue(workspace.run_dir.is_dir())
 
     def test_cli_model_limits_are_validated_and_resume_can_reuse_them(self) -> None:
         parser = build_parser()

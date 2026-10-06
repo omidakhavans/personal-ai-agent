@@ -21,12 +21,21 @@ from .domain import (
     RUN_STATE_VERSION,
     RUN_STATUSES,
     RunSnapshot,
-    new_run_id,
     utc_now,
 )
 from .stages import STAGE_PENDING, STAGE_SKIPPED, WORKFLOW_STAGES, StageStatus
 
 STATE_VERSION = RUN_STATE_VERSION
+# Keep Phase 2's state-module constants importable while the domain module owns
+# their definitions. Existing CLI integrations and saved-run tooling use these
+# names as the stable compatibility surface.
+__all__ = [
+    "RUN_AWAITING_APPROVAL",
+    "RUN_BLOCKED",
+    "RUN_COMPLETED",
+    "RUN_FAILED",
+    "RUN_RUNNING",
+]
 RUN_ID_PATTERN = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{8}$")
 STAGE_STATUSES: frozenset[StageStatus] = frozenset(
     {

@@ -7,7 +7,10 @@ name = "personal-ai-agent"
 version = "0.1.0"
 description = "Minimal local agent runtime skeleton for the Personal Applied AI Engineering project."
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+  "alembic>=1.14,<2",
+  "SQLAlchemy>=2.0,<3",
+]
 
 [project.optional-dependencies]
 dev = [

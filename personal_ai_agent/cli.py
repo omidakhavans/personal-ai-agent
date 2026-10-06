@@ -186,13 +186,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "resources": args.resource or [],
                     "model": args.model,
                 }
-            repository = args.repository or private_config.get("repository")
-            model = args.model or private_config.get("model")
-            resources = tuple(args.resource) if args.resource is not None else tuple(private_config.get("resources", []))
-            if not repository or not model:
-                raise RuntimeErrorWithContext(
-                    "This run has no saved research configuration. Pass --repository and --model."
-                )
+            repository, resources, model = execution_inputs_from_args(args, private_config)
             model_options = model_options_from_args(args, private_config)
             state = Orchestrator(
                 runs_dir=runs_dir,
@@ -226,11 +220,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "resources": args.resource or [],
                     "model": args.model,
                 }
-            repository = args.repository or private_config.get("repository")
-            model = args.model or private_config.get("model")
-            resources = tuple(args.resource) if args.resource is not None else tuple(private_config.get("resources", []))
-            if not repository or not model:
-                raise RuntimeErrorWithContext("This run has no saved research configuration. Pass --repository and --model.")
+            repository, resources, model = execution_inputs_from_args(args, private_config)
             model_options = model_options_from_args(args, private_config)
             state = Orchestrator(
                 runs_dir=runs_dir,
@@ -246,6 +236,22 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     parser.error(f"Unknown command: {args.command}")
 
+
+def execution_inputs_from_args(
+    args: argparse.Namespace, private_config: dict[str, object]
+) -> tuple[str, tuple[str, ...], str]:
+    """Validate CLI overrides and saved inputs before composing stage executors."""
+    repository_override = args.repository
+    model_override = args.model
+    resource_override = args.resource
+    repository = repository_override if isinstance(repository_override, str) else private_config.get("repository")
+    model = model_override if isinstance(model_override, str) else private_config.get("model")
+    resources_value = resource_override if resource_override is not None else private_config.get("resources", [])
+    if not isinstance(repository, str) or not repository or not isinstance(model, str) or not model:
+        raise RuntimeErrorWithContext("This run has no saved research configuration. Pass --repository and --model.")
+    if not isinstance(resources_value, list) or not all(isinstance(item, str) for item in resources_value):
+        raise RuntimeErrorWithContext("Saved research resources are invalid.")
+    return repository, tuple(resources_value), model
 
 def model_options_from_args(
     args: argparse.Namespace, private_config: dict[str, object] | None = None

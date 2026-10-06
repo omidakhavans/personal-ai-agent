@@ -1,0 +1,63 @@
+---
+title: Phase 4 Control Plane Planning
+description: Why an agent admin UI follows persistence and API boundaries.
+---
+
+Phase 4 will add an operator control plane: a separate browser application for
+observing runs and, later, safely managing configuration and approvals. It is
+not the same thing as this documentation site. This site explains the system;
+the control plane will operate it through an API.
+
+## What Exists Today
+
+The runtime has a deterministic orchestrator, a filesystem adapter, and now a
+SQLAlchemy persistence adapter with an Alembic migration. The PostgreSQL
+adapter stores the latest run and stage checkpoint behind the same
+`RunRepository` contract as the filesystem implementation. Markdown artifacts
+remain in the artifact store, and private resume inputs remain outside ordinary
+queryable run state.
+
+That is a deliberately small step. It gives the application a database-shaped
+boundary without making the workflow depend on an ORM.
+
+## Why There Is No Admin Screen Yet
+
+A useful screen needs truthful data and safe commands. Before a browser can
+show a run list or perform an approval, the backend needs query use cases,
+append-only events, typed HTTP contracts, and authorization. Before it can
+edit provider or integration configuration, it needs versioned configuration
+records and a credential-reference system.
+
+Putting controls in a browser first would create a second source of truth. It
+would be tempting to duplicate workflow rules in TypeScript, access a database
+directly, or let a secret cross into browser code. Each choice weakens the
+system.
+
+## The Delivery Order
+
+1. Finish durable run history, attempts, and audit events.
+2. Expose existing safe actions through FastAPI and typed contracts.
+3. Build the separate Vite/React shell and its API client.
+4. Add dashboard and run-detail pages backed by those queries.
+5. Add configuration and integration pages only as their backend capabilities
+   exist.
+
+The first browser pages will be intentionally narrow: dashboard and runs. A
+navigation item is not a capability; unsupported areas should be absent rather
+than pretending to work.
+
+## The Boundary To Remember
+
+The browser is an **interface adapter**. Its job is to collect operator input,
+call an API, and render results. The API translates that request into an
+application use case. The application applies the workflow and approval rules.
+Infrastructure adapters handle PostgreSQL, files, model providers, and later
+publishers.
+
+That separation is ordinary software design, but it is especially useful for
+agent systems. Agent runs have expensive model calls, uncertain inputs, and
+external side effects. One command path, one evidence trail, and one approval
+policy make them much easier to inspect and trust.
+
+See the repository's Phase 4 plan for the full capability map and milestone
+sequence.

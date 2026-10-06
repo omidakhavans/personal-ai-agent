@@ -13,7 +13,7 @@ artifacts. It does not publish anything automatically.
   file-backed, resumable implementation of that workflow, with a command-line
   interface, bounded model calls, artifacts, validation, review, and explicit
   approval.
-- **Phase 3 — production-style agent platform:** planned. It will evolve the
+- **Phase 3 — production-style agent platform:** in progress. It evolves the
   working runtime into a small, observable, API-driven modular monolith without
   discarding the Phase 2 workflow guarantees.
 
@@ -74,7 +74,8 @@ implementation.
 
 ## Phase 3: Production-Style Agent Platform
 
-Status: In progress. Milestone 3.2 is complete.
+Status: In progress. Milestones 3.1, 3.2, and the persistence foundation of
+3.3 are complete.
 
 ### Goal
 
@@ -152,12 +153,14 @@ with orchestration dictionaries and filesystem paths.
 
 #### 3.3 PostgreSQL Persistence Foundation
 
-Status: Planned.
+Status: Foundation complete; history and event work remains in Milestone 3.4.
 
 Add SQLAlchemy 2, Alembic, PostgreSQL configuration, and a PostgreSQL run
-repository. Persist runs, step attempts, checkpoints, artifact metadata, and
-append-only domain events. Keep the file adapter available until a small,
-tested import or compatibility path exists.
+repository. The initial adapter persists runs and their latest per-stage
+checkpoint behind the existing repository port, while artifact bytes and
+owner-only resume configuration remain in their existing stores. Alembic owns
+the PostgreSQL schema. Keep the file adapter available until a small, tested
+import or compatibility path exists.
 
 #### 3.4 Execution History, Audit Trail, And Recovery
 
@@ -239,24 +242,41 @@ search; it is not a default platform dependency.
 
 ## Next Phase 3 Implementation Task
 
-**Implement Milestone 3.3: a PostgreSQL persistence adapter and migration
-foundation.**
+**Implement Milestone 3.4: queryable execution history, audit events, and
+recovery semantics.**
 
 The first pull request should be intentionally narrow:
 
-- introduce SQLAlchemy 2 mappings, Alembic configuration, and PostgreSQL test
-  infrastructure;
-- implement the existing repository contract without importing ORM entities
-  into domain or application code;
-- create migrations only for runs, stage attempts/checkpoints, artifact
-  metadata, approvals, and append-only events;
-- keep the file adapter as the active compatibility path; and
-- run the same repository contract suite against the file and PostgreSQL
-  implementations.
+- add append-only lifecycle and operator events, separate attempt history from
+  the current stage checkpoint, and define query views for a run list and
+  detail timeline;
+- keep ORM entities out of domain and application code;
+- retain the file adapter as the active compatibility path until migration is
+  deliberately enabled; and
+- extend repository contract tests for both file and PostgreSQL adapters.
 
 Do not add FastAPI, Redis, a UI, provider configuration, or publishers in that
-task. The database adapter should be proved before exposing it through another
+task. Queryable history should be proved before exposing it through another
 interface.
+
+## Phase 4: Admin GUI / Agent Control Plane
+
+Status: Planned; implementation begins after the Phase 3 API prerequisites.
+See [Phase 4 Admin Plan](phase-4-admin-plan.md).
+
+Phase 4 is a separate operator application, not an extension of the static
+learning site. The audit found that the current runtime has no HTTP interface,
+database query API, configurable providers, credential store, tool registry,
+or publishing adapter. Building editable dashboard pages now would therefore
+create controls with no safe source of truth.
+
+The correct delivery order is:
+
+1. Finish queryable run history and events (3.4).
+2. Add tested FastAPI use cases and typed request/response contracts (3.5).
+3. Build the Phase 4.1 Vite admin shell and API client against those contracts.
+4. Add run history/detail, then configuration and integration surfaces only as
+   their corresponding backend capabilities exist.
 
 ## Future-Session Handoff
 

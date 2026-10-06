@@ -6,12 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from .domain import (
-    ArtifactReference,
     RUN_AWAITING_APPROVAL,
     RUN_BLOCKED,
     RUN_COMPLETED,
     RUN_FAILED,
     RUN_RUNNING,
+    ArtifactReference,
     RunSnapshot,
     new_run_id,
     utc_now,

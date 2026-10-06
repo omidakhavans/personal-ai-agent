@@ -3,9 +3,10 @@
 ## Scope
 
 Phase 3 evolves the completed Phase 2 local runtime into a small,
-production-style agent platform. Milestone 3.2 is implemented; the remaining
-milestones are a plan. It does not include database, API, worker, or publisher
-implementation yet.
+production-style agent platform. Milestones 3.1 and 3.2 are complete, and the
+foundation of 3.3 is implemented: SQLAlchemy mappings, an Alembic migration,
+and a PostgreSQL-targeted run repository behind the existing port. The remaining
+milestones are a plan. It does not include an API, worker, or publisher yet.
 
 The Phase 3 backend target is Python 3.12+ with FastAPI, Pydantic v2,
 SQLAlchemy 2, and Alembic introduced at the boundaries that need them.

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Literal, TypeAlias, cast
+from typing import Any, Literal, cast
 from uuid import uuid4
 
 from .stages import STAGE_PENDING, WORKFLOW_STAGES, StageStatus
 
-RunStatus: TypeAlias = Literal[
+type RunStatus = Literal[
     "pending", "running", "completed", "blocked", "failed", "awaiting_approval"
 ]
 
