@@ -36,6 +36,8 @@ TERMINAL_STAGE_STATUSES: frozenset[StageStatus] = frozenset({
 
 @dataclass(frozen=True)
 class Stage:
+    """A named workflow step with one required artifact and Phase 1 reference."""
+
     name: str
     artifact: str
     phase1_skill: str
@@ -55,12 +57,16 @@ WORKFLOW_STAGES: tuple[Stage, ...] = (
 
 @dataclass(frozen=True)
 class StageResult:
+    """The terminal outcome returned by an executor after one stage attempt."""
+
     status: StageStatus
     message: str
     artifact: str | None = None
 
 
 class StageExecutor(Protocol):
+    """Interface implemented by every stage capability or deterministic test double."""
+
     def execute(self, *, stage: Stage, subject: str, run_dir: Path) -> StageResult:
         """Execute one stage and return its result."""
 
@@ -73,6 +79,7 @@ class PlaceholderStageExecutor:
     """
 
     def execute(self, *, stage: Stage, subject: str, run_dir: Path) -> StageResult:
+        """Create a predictable placeholder artifact for the requested stage."""
         artifact_path = run_dir / stage.artifact
         artifact_path.write_text(
             "\n".join(
@@ -117,6 +124,7 @@ class RoutedStageExecutor:
         write_x: StageExecutor | None = None,
         fallback: StageExecutor | None = None,
     ) -> None:
+        """Register the concrete executor available for each workflow stage."""
         self.research_work = research_work
         self.research_resources = research_resources
         self.evidence_context = evidence_context
@@ -128,6 +136,7 @@ class RoutedStageExecutor:
         self.fallback = fallback or PlaceholderStageExecutor()
 
     def execute(self, *, stage: Stage, subject: str, run_dir: Path) -> StageResult:
+        """Delegate execution to the stage-specific executor or test fallback."""
         if stage.name == "research-work":
             return self.research_work.execute(stage=stage, subject=subject, run_dir=run_dir)
         if stage.name == "research-resources" and self.research_resources:
@@ -155,11 +164,13 @@ class MappingStageExecutor:
         outcomes: Mapping[str, StageResult] | None = None,
         fallback: StageExecutor | None = None,
     ) -> None:
+        """Store deterministic per-stage outcomes for state-machine tests."""
         self.outcomes = outcomes or {}
         self.fallback = fallback or PlaceholderStageExecutor()
         self.calls: list[str] = []
 
     def execute(self, *, stage: Stage, subject: str, run_dir: Path) -> StageResult:
+        """Record the call and return an override or fallback stage result."""
         self.calls.append(stage.name)
         outcome = self.outcomes.get(stage.name)
         if outcome is None:

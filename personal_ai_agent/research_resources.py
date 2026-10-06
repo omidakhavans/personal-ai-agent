@@ -23,12 +23,16 @@ VALID_CLAIM_STATUSES = {"Source fact", "Interpretation", "Unknown"}
 
 @dataclass(frozen=True)
 class ResearchResourcesSettings:
+    """Supplied references and model configuration for resource research."""
+
     references: tuple[str, ...]
     model: str
 
 
 @dataclass(frozen=True)
 class Resource:
+    """One readable source normalized for the resource-research model input."""
+
     identifier: str
     title: str
     reference: str
@@ -37,6 +41,8 @@ class Resource:
 
 @dataclass(frozen=True)
 class ResourceBundle:
+    """The requested resources, successful reads, and visible failures."""
+
     requested: tuple[str, ...]
     resources: tuple[Resource, ...]
     inaccessible: tuple[str, ...]
@@ -46,10 +52,12 @@ class ResourceResearchExecutor:
     """Read supplied resources, ask a model to interpret them, and write one report."""
 
     def __init__(self, *, settings: ResearchResourcesSettings, client: ModelClient) -> None:
+        """Store source settings and the bounded model client for execution."""
         self.settings = settings
         self.client = client
 
     def execute(self, *, stage: Stage, subject: str, run_dir: Path) -> StageResult:
+        """Research supplied sources or record a skipped or blocked outcome."""
         if stage.name != "research-resources":
             raise ValueError(f"ResourceResearchExecutor cannot execute {stage.name!r}.")
 
@@ -90,6 +98,7 @@ class ResourceResearchExecutor:
 
 
 def collect_resources(references: tuple[str, ...]) -> ResourceBundle:
+    """Read explicitly supplied sources and record each safe read failure."""
     resources: list[Resource] = []
     inaccessible: list[str] = []
     for reference in references:
@@ -204,28 +213,36 @@ def _text_from_content(content: str, suffix: str) -> str:
 
 
 class _HTMLTextExtractor(HTMLParser):
+    """Extract visible text while ignoring executable and styling HTML elements."""
+
     def __init__(self) -> None:
+        """Initialize the visible-text buffer and ignored-element depth."""
         super().__init__()
         self.parts: list[str] = []
         self._ignored_depth = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        """Start suppressing text when entering a non-content element."""
         if tag in {"script", "style", "noscript"}:
             self._ignored_depth += 1
 
     def handle_endtag(self, tag: str) -> None:
+        """Resume visible-text collection after leaving a suppressed element."""
         if tag in {"script", "style", "noscript"} and self._ignored_depth:
             self._ignored_depth -= 1
 
     def handle_data(self, data: str) -> None:
+        """Collect text nodes that are outside suppressed HTML elements."""
         if not self._ignored_depth:
             self.parts.append(data)
 
     def text(self) -> str:
+        """Return the collected visible text as non-empty lines."""
         return "\n".join(part.strip() for part in self.parts if part.strip())
 
 
 def resources_report_schema() -> dict[str, Any]:
+    """Return the strict JSON schema for resource-research findings."""
     return {
         "type": "object",
         "additionalProperties": False,
@@ -273,6 +290,7 @@ def _claim_array_schema() -> dict[str, Any]:
 
 
 def resource_instructions() -> str:
+    """Describe source-bound claim rules for the resource-research model call."""
     return """You are a technical resource research analyst. Use only the supplied resources.
 Never present a claim as a Source fact unless it is supported by one or more resource IDs.
 Use Interpretation only for a clearly labeled synthesis that still cites the resources it connects.
@@ -281,6 +299,7 @@ Do not write a blog post or promotional copy. Return only JSON matching the sche
 
 
 def render_model_input(subject: str, bundle: ResourceBundle) -> str:
+    """Render readable supplied resources and allowed IDs for model analysis."""
     parts = [f"Subject: {subject}", "", "Supplied resources:"]
     for resource in bundle.resources:
         parts.extend(
@@ -296,6 +315,7 @@ def render_model_input(subject: str, bundle: ResourceBundle) -> str:
 
 
 def validate_report(report: Any, bundle: ResourceBundle) -> None:
+    """Reject resource findings that violate their schema or source references."""
     if not isinstance(report, dict) or set(report) != set(resources_report_schema()["required"]):
         raise RuntimeError("Model report did not match the required resource research schema.")
     resource_ids = {resource.identifier for resource in bundle.resources}
@@ -317,6 +337,7 @@ def validate_report(report: Any, bundle: ResourceBundle) -> None:
 
 
 def render_resources_report(subject: str, bundle: ResourceBundle, report: dict[str, Any]) -> str:
+    """Render a source-traceable external-resource research artifact."""
     parts = [
         "# Resource Research Report", "", "## Subject", "", subject, "", "## Investigation Scope", "",
         "- Resources requested: " + (", ".join(f"`{reference}`" for reference in bundle.requested) or "None"),
@@ -349,6 +370,7 @@ def render_resources_report(subject: str, bundle: ResourceBundle, report: dict[s
 
 
 def render_no_resources_report(subject: str) -> str:
+    """Render the explicit skipped artifact for a run without supplied resources."""
     return "\n".join([
         "# Resource Research Report", "", "## Subject", "", subject, "", "## Investigation Scope", "",
         "- Resources requested: None", "- Resources inspected: None",
@@ -359,6 +381,7 @@ def render_no_resources_report(subject: str) -> str:
 
 
 def render_inaccessible_resources_report(subject: str, bundle: ResourceBundle) -> str:
+    """Render the blocked artifact when every supplied resource was unavailable."""
     return "\n".join([
         "# Resource Research Report", "", "## Subject", "", subject, "", "## Investigation Scope", "",
         "- Resources requested: " + ", ".join(f"`{reference}`" for reference in bundle.requested),

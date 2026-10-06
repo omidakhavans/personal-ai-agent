@@ -11,6 +11,7 @@ class SocialApprovalExecutor:
     """Pause a reviewed run until its owner approves social transformation."""
 
     def execute(self, *, stage: Stage, subject: str, run_dir: Path) -> StageResult:
+        """Write the approval request artifact and pause the workflow."""
         if stage.name != "approve-social":
             raise ValueError(f"SocialApprovalExecutor cannot execute {stage.name!r}.")
         (run_dir / stage.artifact).write_text(render_approval_request(subject), encoding="utf-8")
@@ -22,6 +23,7 @@ class SocialApprovalExecutor:
 
 
 def render_approval_request(subject: str) -> str:
+    """Render the artifact that asks an owner to approve social drafting."""
     return "\n".join([
         "# Social Transformation Approval", "", "## Subject", "", subject, "", "## Status", "",
         "- awaiting_human_approval", "", "## Decision Required", "",
@@ -32,6 +34,7 @@ def render_approval_request(subject: str) -> str:
 def render_approved_social_transformations(
     subject: str, notes: str | None, blog_sha256: str
 ) -> str:
+    """Render an approval record bound to the reviewed blog fingerprint."""
     details = notes.strip() if notes and notes.strip() else "No approval notes were supplied."
     return "\n".join([
         "# Social Transformation Approval", "", "## Subject", "", subject, "", "## Status", "", "- approved", "",

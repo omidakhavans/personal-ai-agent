@@ -18,6 +18,8 @@ class ArtifactInputError(RuntimeError):
 
 @dataclass(frozen=True)
 class ArticleInputs:
+    """Validated evidence context and blog draft used by review stages."""
+
     context_brief: str
     blog_draft: str
     blog_sha256: str
@@ -27,12 +29,15 @@ class ArticleInputs:
 
 @dataclass(frozen=True)
 class ReviewedArticleInputs:
+    """An article input bundle paired with its passing evidence-aware review."""
+
     article: ArticleInputs
     blog_review: str
     review_status: str
 
 
 def collect_article_inputs(run_dir: Path) -> ArticleInputs:
+    """Load and validate the evidence context and canonical blog draft."""
     context_brief = _read_artifact(
         run_dir, "context-brief.md", MAX_CONTEXT_BRIEF_CHARACTERS
     )
@@ -56,6 +61,7 @@ def collect_article_inputs(run_dir: Path) -> ArticleInputs:
 
 
 def collect_reviewed_article_inputs(run_dir: Path) -> ReviewedArticleInputs:
+    """Load article inputs and require a matching review that passed evaluation."""
     article = collect_article_inputs(run_dir)
     review = _read_artifact(run_dir, "blog-review.md", MAX_BLOG_REVIEW_CHARACTERS)
     if not review.startswith("# Blog Review"):
@@ -76,6 +82,7 @@ def collect_reviewed_article_inputs(run_dir: Path) -> ReviewedArticleInputs:
 
 
 def collect_approved_article_inputs(run_dir: Path) -> ReviewedArticleInputs:
+    """Require explicit approval that matches the current reviewed blog draft."""
     inputs = collect_reviewed_article_inputs(run_dir)
     approval = _read_artifact(run_dir, "approval.md", 12_000)
     approved = re.search(r"^## Status\s*$\n+^- approved$", approval, flags=re.MULTILINE)
@@ -88,11 +95,13 @@ def collect_approved_article_inputs(run_dir: Path) -> ReviewedArticleInputs:
 
 
 def extract_references(report: str, label: str, prefix: str) -> dict[str, str]:
+    """Extract evidence identifiers from a rendered context report section."""
     pattern = re.compile(rf"^- {re.escape(label)} `({prefix}\d+)`: (.+)$", re.MULTILINE)
     return {identifier: reference for identifier, reference in pattern.findall(report)}
 
 
 def sha256_text(value: str) -> str:
+    """Return the stable SHA-256 identity for an artifact's exact text."""
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 

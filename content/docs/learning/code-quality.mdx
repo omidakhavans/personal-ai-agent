@@ -42,6 +42,14 @@ human review    -> should this draft be trusted and used?
 
 None replaces the others.
 
+## Code documentation standard
+
+The runtime uses docstrings as its first layer of documentation: every module explains its boundary, every class names its responsibility, every method explains its contract or state effect, and public helpers describe the artifact, validation, or model boundary they expose.
+
+Inline comments are reserved for decisions the code alone cannot make obvious, such as why a network request must not retry or why redirects need a second validation. Repeating code in prose creates noise; explaining a trade-off makes the system easier to maintain.
+
+When adding a stage, begin with its executor class docstring. Then document `execute()`: the artifact it writes, when it blocks, and the boundary it enforces. The source becomes a reliable learning path alongside the stage walkthrough.
+
 ## Useful operator inputs
 
 ```bash

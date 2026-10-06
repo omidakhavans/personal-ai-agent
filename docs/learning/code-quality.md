@@ -66,6 +66,26 @@ human review    -> should this draft be trusted and used?
 
 None replaces the others.
 
+## Code Documentation Standard
+
+The runtime uses docstrings as its first layer of code documentation:
+
+- every module explains its boundary in one sentence
+- every class names the responsibility it owns
+- every method explains its contract or state effect
+- public helper functions explain the artifact, validation, or model boundary
+  they expose
+
+Inline comments are reserved for decisions the code alone cannot make obvious,
+such as why a network request must not retry or why a redirect needs a second
+validation. Repeating a variable assignment in prose makes code harder to read;
+explaining an intentional trade-off makes it easier to maintain.
+
+When you add a stage, start by naming its responsibility in the executor class
+docstring. Then document the `execute()` contract: which artifact it writes,
+when it blocks, and which boundary it enforces. This turns the source itself
+into a dependable learning path without replacing the stage walkthrough.
+
 ## Useful Operator Inputs
 
 The CLI validates positive numeric limits before a request starts:

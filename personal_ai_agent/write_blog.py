@@ -16,11 +16,15 @@ MAX_CONTEXT_BRIEF_CHARACTERS = 40_000
 
 @dataclass(frozen=True)
 class BlogWriterSettings:
+    """Model configuration for the grounded blog-writing stage."""
+
     model: str
 
 
 @dataclass(frozen=True)
 class BlogInputs:
+    """Validated context brief, focus, and source IDs available to the writer."""
+
     context_brief: str
     article_focus: str
     work_references: dict[str, str]
@@ -35,10 +39,12 @@ class BlogWriterExecutor:
     """Write one evidence-grounded draft without researching or publishing."""
 
     def __init__(self, *, settings: BlogWriterSettings, client: ModelClient) -> None:
+        """Store the model settings and client used to write the draft."""
         self.settings = settings
         self.client = client
 
     def execute(self, *, stage: Stage, subject: str, run_dir: Path) -> StageResult:
+        """Write a cited blog draft or block when the context cannot support it."""
         if stage.name != "write-blog":
             raise ValueError(f"BlogWriterExecutor cannot execute {stage.name!r}.")
 
@@ -70,6 +76,7 @@ class BlogWriterExecutor:
 
 
 def collect_blog_inputs(run_dir: Path) -> BlogInputs:
+    """Load a ready evidence context and extract the writer's allowed sources."""
     context_path = run_dir / "context-brief.md"
     if not context_path.is_file():
         raise BlogInputError("Evidence context brief is missing; a blog draft cannot be grounded.")
@@ -114,6 +121,7 @@ def _extract_references(report: str, label: str, prefix: str) -> dict[str, str]:
 
 
 def blog_draft_schema() -> dict[str, Any]:
+    """Return the strict JSON schema for one grounded blog draft."""
     return {
         "type": "object",
         "additionalProperties": False,
@@ -159,6 +167,7 @@ def _grounded_text_schema() -> dict[str, Any]:
 
 
 def blog_instructions() -> str:
+    """Describe narrative, grounding, and review constraints for blog drafting."""
     return """You are a technical blog writer. Create a human-reviewable technical article draft from only the supplied evidence context.
 Do not research, publish, create social posts, or claim anything not supported by the context.
 Describe the user's work only when cited work evidence supports it. Describe general technical concepts only when cited resource evidence supports them. Keep interpretation distinct from verified facts, and preserve important uncertainty as review caveats.
@@ -169,6 +178,7 @@ Return only JSON matching the schema. Paragraph text must be plain prose without
 
 
 def render_model_input(subject: str, inputs: BlogInputs) -> str:
+    """Render the selected context and permitted evidence IDs for the writer."""
     return "\n".join(
         [
             f"Subject: {subject}",
@@ -186,6 +196,7 @@ def render_model_input(subject: str, inputs: BlogInputs) -> str:
 
 
 def validate_blog_draft(draft: Any, inputs: BlogInputs) -> None:
+    """Reject draft content that lacks valid structure or traceable evidence IDs."""
     required = {
         "title",
         "subtitle",
@@ -245,6 +256,7 @@ def _validate_grounded_text(
 
 
 def render_blog_draft(subject: str, inputs: BlogInputs, draft: dict[str, Any]) -> str:
+    """Render a draft-only canonical article with evidence and review caveats."""
     parts = [
         "# Blog Draft",
         "",
@@ -284,6 +296,7 @@ def render_blog_draft(subject: str, inputs: BlogInputs, draft: dict[str, Any]) -
 
 
 def render_blocked_blog_draft(subject: str, reason: str) -> str:
+    """Render a visible blocked draft when the context cannot safely support writing."""
     return "\n".join(
         [
             "# Blog Draft",

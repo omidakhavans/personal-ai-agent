@@ -41,12 +41,15 @@ class RuntimeErrorWithContext(RuntimeError):
 
 
 class Orchestrator:
+    """Own deterministic state transitions for one sequential content workflow."""
+
     def __init__(
         self,
         *,
         runs_dir: Path,
         executor: StageExecutor | None = None,
     ) -> None:
+        """Set the run storage location and stage executor used for advancement."""
         self.runs_dir = runs_dir
         self.executor = executor or PlaceholderStageExecutor()
 
@@ -57,6 +60,7 @@ class Orchestrator:
         inputs: dict[str, Any] | None = None,
         private_inputs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """Create a checkpointed run and advance it until it stops or completes."""
         run_id = new_run_id()
         paths = paths_for_run(self.runs_dir, run_id)
         paths.run_dir.mkdir(parents=True, exist_ok=False)
@@ -71,6 +75,7 @@ class Orchestrator:
             raise RuntimeErrorWithContext(str(exc)) from exc
 
     def resume(self, run_id: str) -> dict[str, Any]:
+        """Continue an unfinished run after validating its prior artifacts."""
         try:
             paths = paths_for_run(self.runs_dir, run_id)
             with run_lock(paths.run_dir):
@@ -102,6 +107,7 @@ class Orchestrator:
             raise RuntimeErrorWithContext(str(exc)) from exc
 
     def _reset_interrupted_stage(self, state: dict[str, Any]) -> None:
+        """Make one interrupted running stage eligible for an explicit retry."""
         for stage in WORKFLOW_STAGES:
             stage_state = state["stages"][stage.name]
             if stage_state["status"] == STAGE_RUNNING:
@@ -155,6 +161,7 @@ class Orchestrator:
         state_path: Path,
         run_dir: Path,
     ) -> dict[str, Any]:
+        """Advance pending stages in order until a terminal workflow outcome."""
         state["status"] = RUN_RUNNING
         write_state(state_path, state)
 
@@ -256,6 +263,7 @@ class Orchestrator:
         expected_artifact: str,
         run_dir: Path,
     ) -> str | None:
+        """Return an error when a reported artifact violates the stage contract."""
         if status == STAGE_FAILED:
             return None
         if artifact != expected_artifact:
@@ -268,6 +276,7 @@ class Orchestrator:
         return None
 
     def _verify_prior_artifacts(self, state: dict[str, Any], run_dir: Path) -> None:
+        """Ensure saved terminal stages still have the artifacts later stages trust."""
         for stage in WORKFLOW_STAGES:
             stage_state = state["stages"][stage.name]
             if stage_state["status"] in {

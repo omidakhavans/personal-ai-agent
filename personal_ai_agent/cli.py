@@ -59,6 +59,7 @@ def positive_int(value: str) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the CLI grammar for starting and operating local workflow runs."""
     parser = argparse.ArgumentParser(
         prog="personal-ai-agent",
         description="Minimal local agent runtime skeleton.",
@@ -141,6 +142,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Parse CLI input, construct required capabilities, and run one command."""
     parser = build_parser()
     args = parser.parse_args(argv)
     runs_dir = Path(args.runs_dir)
@@ -264,6 +266,7 @@ def model_options_from_args(
 
 
 def print_run_result(state: dict, *, output_format: str) -> None:
+    """Print a safe concise status summary for a newly advanced run."""
     run_id = state["run_id"]
     artifact_names = [
         stage["artifact"]
@@ -291,6 +294,7 @@ def print_run_result(state: dict, *, output_format: str) -> None:
 
 
 def print_validation_result(state: dict, *, output_format: str) -> None:
+    """Print the outcome of the read-only state and artifact validation command."""
     validated = [
         name
         for name, stage in state["stages"].items()
@@ -320,9 +324,11 @@ def build_content_executor(
     model: str,
     model_options: ModelRuntimeOptions | None = None,
 ) -> RoutedStageExecutor:
+    """Compose the concrete executors used by the Phase 2 CLI workflow."""
     options = model_options or ModelRuntimeOptions()
 
     def client(default_max_output_tokens: int) -> OpenAIResponsesClient:
+        """Create a client that shares run limits and preserves stage defaults."""
         return OpenAIResponsesClient(
             timeout_seconds=options.timeout_seconds,
             max_attempts=options.max_attempts,

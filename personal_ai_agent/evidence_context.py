@@ -23,11 +23,15 @@ CLAIM_LABELS = {
 
 @dataclass(frozen=True)
 class EvidenceContextSettings:
+    """Configuration shared by one evidence-context model invocation."""
+
     model: str
 
 
 @dataclass(frozen=True)
 class ContextInputs:
+    """Validated research reports and traceable IDs available to the context editor."""
+
     work_report: str
     resources_report: str | None
     work_references: dict[str, str]
@@ -39,10 +43,12 @@ class EvidenceContextExecutor:
     """Select grounded, high-signal context for later writing stages."""
 
     def __init__(self, *, settings: EvidenceContextSettings, client: ModelClient) -> None:
+        """Store the model settings and boundary client for later execution."""
         self.settings = settings
         self.client = client
 
     def execute(self, *, stage: Stage, subject: str, run_dir: Path) -> StageResult:
+        """Build a traceable context brief or record why it cannot be built."""
         if stage.name != "build-evidence-context":
             raise ValueError(f"EvidenceContextExecutor cannot execute {stage.name!r}.")
 
@@ -88,6 +94,7 @@ class ContextInputError(RuntimeError):
 
 
 def collect_context_inputs(run_dir: Path) -> ContextInputs:
+    """Load same-run research reports and extract their permitted evidence IDs."""
     work_path = run_dir / "research-report.md"
     resources_path = run_dir / "resources-report.md"
     if not work_path.is_file():
@@ -128,6 +135,7 @@ def _extract_references(report: str, prefix: str) -> dict[str, str]:
 
 
 def context_brief_schema() -> dict[str, Any]:
+    """Return the strict JSON schema required from the context editor."""
     claim_sections = [
         "executive_summary",
         "verified_work_evidence",
@@ -181,6 +189,7 @@ def _claim_array_schema() -> dict[str, Any]:
 
 
 def context_instructions() -> str:
+    """Describe the grounding and reduction rules for the context editor."""
     return """You are an evidence-context editor. Build a concise context package for a later technical writer.
 Use only the supplied work and resource research reports. Do not write article prose.
 Never convert interpretation into fact. Claims about what the user built must rely on work evidence IDs.
@@ -190,6 +199,7 @@ Exclude duplicate or irrelevant information rather than preserving everything. R
 
 
 def render_model_input(subject: str, inputs: ContextInputs) -> str:
+    """Render bounded research artifacts and allowed IDs for the model call."""
     parts = [
         f"Subject: {subject}",
         "",
@@ -210,6 +220,7 @@ def render_model_input(subject: str, inputs: ContextInputs) -> str:
 
 
 def validate_context_brief(brief: Any, inputs: ContextInputs) -> None:
+    """Reject context output that violates its schema or evidence boundaries."""
     schema = context_brief_schema()
     if not isinstance(brief, dict) or set(brief) != set(schema["required"]):
         raise RuntimeError("Model context brief did not match the required schema.")
@@ -265,6 +276,7 @@ def _validate_reference_ids(value: Any, allowed: set[str], label: str) -> None:
 
 
 def render_context_brief(subject: str, inputs: ContextInputs, brief: dict[str, Any]) -> str:
+    """Render a readable, source-traceable context package for later stages."""
     parts = [
         "# Evidence Context Brief", "", "## Subject", "", subject, "", "## Author Context", "",
         "- Material questions/assumptions: No article-specific author context was supplied to this runtime run.",
@@ -306,6 +318,7 @@ def render_context_brief(subject: str, inputs: ContextInputs, brief: dict[str, A
 
 
 def render_blocked_context_brief(subject: str, reason: str) -> str:
+    """Render a visible context artifact when the writing boundary cannot proceed."""
     return "\n".join([
         "# Evidence Context Brief", "", "## Subject", "", subject, "", "## Input Artifacts", "",
         f"- Limitation: {reason}", "", "## Unknown Or Unverified Information", "",

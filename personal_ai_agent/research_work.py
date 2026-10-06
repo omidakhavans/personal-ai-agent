@@ -39,6 +39,7 @@ VALID_CLAIM_STATUSES = {"Verified", "Inference", "Unknown"}
 
 
 def research_report_schema() -> dict[str, Any]:
+    """Return the strict JSON schema for local work-research findings."""
     return {
             "type": "object",
             "additionalProperties": False,
@@ -67,12 +68,16 @@ def research_report_schema() -> dict[str, Any]:
 
 @dataclass(frozen=True)
 class ResearchWorkSettings:
+    """Repository and model configuration for one work-research stage."""
+
     repository: Path
     model: str
 
 
 @dataclass(frozen=True)
 class EvidenceItem:
+    """One bounded local excerpt or Git result supplied to the model."""
+
     identifier: str
     reference: str
     content: str
@@ -80,6 +85,8 @@ class EvidenceItem:
 
 @dataclass(frozen=True)
 class EvidenceBundle:
+    """The local evidence collection and its search metadata."""
+
     repository: Path
     branch: str | None
     working_tree: str | None
@@ -91,10 +98,12 @@ class ResearchWorkExecutor:
     """Collect local evidence, ask a model to interpret it, and render one report."""
 
     def __init__(self, *, settings: ResearchWorkSettings, client: ModelClient) -> None:
+        """Store the repository settings and model boundary for execution."""
         self.settings = settings
         self.client = client
 
     def execute(self, *, stage: Stage, subject: str, run_dir: Path) -> StageResult:
+        """Create a grounded report or block when no local evidence was found."""
         if stage.name != "research-work":
             raise ValueError(f"ResearchWorkExecutor cannot execute {stage.name!r}.")
 
@@ -143,6 +152,7 @@ def _claim_array_schema() -> dict[str, Any]:
 
 
 def collect_local_evidence(subject: str, repository: Path) -> EvidenceBundle:
+    """Collect a bounded, redacted set of subject-matched local evidence."""
     repository = repository.expanduser().resolve()
     if not repository.is_dir():
         raise RuntimeError(f"Configured repository does not exist: {repository}")
@@ -184,6 +194,7 @@ def collect_local_evidence(subject: str, repository: Path) -> EvidenceBundle:
 
 
 def subject_terms(subject: str) -> list[str]:
+    """Derive a short, de-duplicated subject search vocabulary."""
     terms = re.findall(r"[A-Za-z0-9_+-]{3,}", subject.lower())
     return list(dict.fromkeys(term for term in terms if term not in STOP_WORDS))[:8]
 
@@ -273,6 +284,7 @@ def _git_output(repository: Path, *args: str) -> str:
 
 
 def research_instructions() -> str:
+    """Describe the grounded claim rules for the work-research model call."""
     return """You are a technical research analyst. Use only the supplied local evidence.
 Never claim that the user built, learned, intended, or experienced something unless the evidence supports it.
 Every claim has a status: Verified, Inference, or Unknown. Verified claims and Inferences must cite one or more supplied evidence IDs.
@@ -281,6 +293,7 @@ Do not use Markdown. Return only JSON matching the schema. Keep the report conci
 
 
 def render_model_input(subject: str, evidence: EvidenceBundle) -> str:
+    """Render only selected evidence and metadata for model interpretation."""
     parts = [
         f"Subject: {subject}",
         f"Repository: {repository_label(evidence.repository)}",
@@ -295,6 +308,7 @@ def render_model_input(subject: str, evidence: EvidenceBundle) -> str:
 
 
 def validate_report(report: Any, evidence: EvidenceBundle) -> None:
+    """Reject model findings that break the work-evidence report contract."""
     if not isinstance(report, dict):
         raise RuntimeError("Model report must be a JSON object.")
     required = {
@@ -322,6 +336,7 @@ def validate_report(report: Any, evidence: EvidenceBundle) -> None:
 
 
 def render_research_report(subject: str, evidence: EvidenceBundle, report: dict[str, Any]) -> str:
+    """Render a structured local-work report with stable evidence references."""
     parts = ["# Research Report", "", "## Subject", "", subject, "", "## Investigation Scope", "", f"- Repository/project inspected: `{repository_label(evidence.repository)}`", f"- Branch/current state: `{evidence.branch or 'not available'}`", f"- Search terms used: {', '.join(evidence.search_terms) or 'none'}", "- Areas intentionally skipped: Files not matched by the subject search and no external resources.", "", "## Executive Research Summary", ""]
     parts.extend(_claim_lines(report["executive_summary"]))
     for heading, key in [
@@ -345,6 +360,7 @@ def render_research_report(subject: str, evidence: EvidenceBundle, report: dict[
 
 
 def render_insufficient_evidence_report(subject: str, evidence: EvidenceBundle) -> str:
+    """Render the blocked report used when no local evidence can support claims."""
     return "\n".join([
         "# Research Report", "", "## Subject", "", subject, "", "## Investigation Scope", "",
         f"- Repository/project inspected: `{repository_label(evidence.repository)}`",

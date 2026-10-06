@@ -40,6 +40,8 @@ def validate_public_https_url(url: str) -> None:
 
 
 class _PublicRedirectHandler(HTTPRedirectHandler):
+    """Redirect handler that reapplies the public-network policy at each hop."""
+
     max_redirections = 3
 
     def redirect_request(
@@ -51,6 +53,7 @@ class _PublicRedirectHandler(HTTPRedirectHandler):
         headers: Any,
         newurl: str,
     ) -> Request | None:
+        """Validate a redirect target before handing it back to urllib."""
         # Redirect targets are new, untrusted network destinations. Validate
         # each before urllib has an opportunity to request it.
         validate_public_https_url(newurl)

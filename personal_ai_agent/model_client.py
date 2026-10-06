@@ -38,6 +38,7 @@ class OpenAIResponsesClient:
         max_output_tokens: int = 1_600,
         max_attempts: int = 3,
     ) -> None:
+        """Validate and retain operational limits for one API client."""
         if timeout_seconds <= 0 or max_output_tokens <= 0 or max_attempts <= 0:
             raise ValueError("Model client limits must be positive.")
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
@@ -54,6 +55,7 @@ class OpenAIResponsesClient:
         schema_name: str,
         schema: dict[str, Any],
     ) -> dict[str, Any]:
+        """Request schema-constrained JSON from the configured Responses endpoint."""
         if not self.api_key:
             raise RuntimeError("OPENAI_API_KEY is required to run a real model stage.")
         payload = {
@@ -99,6 +101,7 @@ class OpenAIResponsesClient:
         return cast(dict[str, Any], response)
 
     def _send_with_retries(self, request: urllib.request.Request) -> dict[str, Any]:
+        """Send one request, retrying only clearly retryable HTTP responses."""
         for attempt in range(1, self.max_attempts + 1):
             try:
                 with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:

@@ -56,16 +56,20 @@ class StateError(RuntimeError):
 
 
 def utc_now() -> str:
+    """Return the current timezone-aware timestamp for persisted audit fields."""
     return datetime.now(UTC).isoformat()
 
 
 def new_run_id() -> str:
+    """Create a sortable, filesystem-safe identifier for a new workflow run."""
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     return f"{stamp}-{uuid4().hex[:8]}"
 
 
 @dataclass(frozen=True)
 class RunPaths:
+    """Canonical filesystem locations associated with one validated run ID."""
+
     runs_dir: Path
     run_dir: Path
     state_path: Path
@@ -78,6 +82,7 @@ def private_config_path(runs_dir: Path, run_id: str) -> Path:
 
 
 def paths_for_run(runs_dir: Path, run_id: str) -> RunPaths:
+    """Validate a run ID and derive paths confined beneath the runs directory."""
     if not RUN_ID_PATTERN.fullmatch(run_id):
         raise StateError("Run id is invalid.")
     resolved_runs_dir = runs_dir.expanduser().resolve()
@@ -92,6 +97,7 @@ def initial_state(
     subject: str,
     inputs: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Create the complete initial checkpoint for a valid workflow subject."""
     if not subject.strip():
         raise StateError("Run subject must not be empty.")
     return {
@@ -118,6 +124,7 @@ def initial_state(
 
 
 def read_state(state_path: Path) -> dict[str, Any]:
+    """Load, migrate, and validate one durable workflow checkpoint."""
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
@@ -130,6 +137,7 @@ def read_state(state_path: Path) -> dict[str, Any]:
 
 
 def write_state(state_path: Path, state: dict[str, Any]) -> None:
+    """Validate and atomically checkpoint state after a workflow transition."""
     state = deepcopy(state)
     state["updated_at"] = utc_now()
     _validate_state(state)
@@ -146,6 +154,7 @@ def write_private_config(runs_dir: Path, run_id: str, config: dict[str, Any]) ->
 
 
 def read_private_config(runs_dir: Path, run_id: str) -> dict[str, Any]:
+    """Load validated machine-local resume configuration for a saved run."""
     path = private_config_path(runs_dir, run_id)
     try:
         config = json.loads(path.read_text(encoding="utf-8"))
