@@ -42,6 +42,7 @@ from .domain import ArtifactReference, RunSnapshot, RunStatus, StageSnapshot, ut
 from .persistence import RunWorkspace
 from .privacy import redact_sensitive_text
 from .run_queries import (
+    InvalidRunCursorError,
     RunDetail,
     RunEventView,
     RunListFilters,
@@ -563,9 +564,9 @@ def _decode_cursor(cursor: str) -> tuple[datetime, str]:
         timestamp = value["created_at"]
         run_id = value["run_id"]
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-        raise ValueError("Run query cursor is invalid.") from exc
+        raise InvalidRunCursorError("Run query cursor is invalid.") from exc
     if not isinstance(timestamp, str) or not isinstance(run_id, str):
-        raise ValueError("Run query cursor is invalid.")
+        raise InvalidRunCursorError("Run query cursor is invalid.")
     return _normalize_datetime(datetime.fromisoformat(timestamp)), run_id
 
 

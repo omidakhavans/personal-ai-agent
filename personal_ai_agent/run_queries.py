@@ -14,6 +14,10 @@ from .domain import RunStatus
 from .stages import StageStatus
 
 
+class InvalidRunCursorError(ValueError):
+    """A caller supplied a malformed keyset cursor for run history."""
+
+
 @dataclass(frozen=True)
 class RunListFilters:
     """The small, currently justified filter set for a run-history table."""

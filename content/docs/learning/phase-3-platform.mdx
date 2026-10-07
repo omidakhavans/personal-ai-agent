@@ -49,19 +49,18 @@ layer.
 ## What has been implemented
 
 Phase 3.3 adds the PostgreSQL-backed snapshot adapter and Alembic migrations.
-Phase 3.4 adds append-only run events and storage-neutral query DTOs. The
+Phase 3.4 adds append-only run events and storage-neutral query DTOs. Phase
+3.5 exposes those read models through a versioned FastAPI adapter. The
 filesystem adapter remains fully compatible, while the future control plane can
-eventually list and inspect PostgreSQL-backed runs without scanning directories.
+list and inspect PostgreSQL-backed runs without scanning directories.
 
 ## What comes next
 
-1. A FastAPI layer with typed request and response contracts; the CLI uses the
-   same application use cases.
-2. A separate operator control plane for run history, artifacts, and explicit
+1. A separate operator control plane for run history, artifacts, and explicit
    approvals. The learning site remains documentation only.
-3. Versioned model, prompt, and tool configuration plus encrypted credentials.
-4. A publisher port, starting with a human-controlled WordPress draft/preview.
-5. Social publishing, background jobs, and observability after the audit,
+2. Versioned model, prompt, and tool configuration plus encrypted credentials.
+3. A publisher port, starting with a human-controlled WordPress draft/preview.
+4. Social publishing, background jobs, and observability after the audit,
    approval, and idempotency foundations are in place.
 
 ## Keep the categories separate
@@ -94,6 +93,6 @@ expectations, and proposed architecture decisions:
 - [Phase 3 Platform Plan](https://github.com/omidakhavans/personal-ai-agent/blob/main/docs/phase-3-platform-plan.md)
 - [Architecture Decision Records](https://github.com/omidakhavans/personal-ai-agent/tree/main/docs/adr)
 
-The next implementation task is **FastAPI application contracts**. It will
-expose the safe query and command boundaries without weakening the workflow
-that already works or building the browser control plane prematurely.
+The next implementation task is **React Admin Foundation + Read-Only Control
+Plane**. It will consume the safe API boundaries without duplicating workflow
+logic or turning the documentation site into an administration surface.

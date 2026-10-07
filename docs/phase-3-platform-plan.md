@@ -328,12 +328,16 @@ diagnostic data rather than business truth.
 
 ### 3.5 API And Typed Contracts
 
-**Objective:** expose stable application use cases over HTTP.
+**Status:** Complete with a deliberately read-only API.
+
+**Objective:** expose stable, currently safe application reads over HTTP.
 
 **Reuse:** application services and ports; retain the CLI as a thin client.
 
-**New components:** FastAPI routes, Pydantic v2 request/response schemas,
-authentication design appropriate to the deployment, and API error mapping.
+**Delivered components:** FastAPI application factory, explicit dependency
+composition, Pydantic v2 response schemas, central error mapping, explicit
+development CORS, liveness/readiness routes, run list/detail routes, and fixed
+workflow metadata.
 
 **Database/migration:** no mandatory schema change beyond actor/audit fields if
 the chosen authentication model requires them.
@@ -341,11 +345,15 @@ the chosen authentication model requires them.
 **Risks:** leaking artifact content, private references, or credentials through
 API responses; making routes own orchestration policy.
 
-**Tests:** API contract tests, authorization tests, pagination/filter tests,
-and snapshot-safe serialization tests.
+**Tests:** health/readiness behavior, pagination/filter/cursor mapping, missing
+run and invalid cursor errors, response redaction/no-path regressions, CORS,
+OpenAPI route generation, and snapshot-safe serialization tests.
 
-**Done means:** an API can start, inspect, validate, approve, and resume a run
-with the same guard behavior as the CLI.
+**Done means:** an API can inspect durable history and fixed workflow metadata
+without leaking infrastructure data or giving the browser unsupported mutation
+controls. Starting, validating, approving, resuming, cancelling, and retrying
+runs remain CLI/application work until their synchronous/private-input and
+authentication constraints have safe API designs.
 
 **Learning objective:** an API boundary validates untrusted input and makes a
 system usable by multiple interfaces; it is not the business layer itself.

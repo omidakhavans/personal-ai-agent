@@ -11,8 +11,9 @@ The audit found an important prerequisite: Phase 3.2 introduced only a
 filesystem persistence boundary. The repository did not yet have PostgreSQL,
 Alembic, HTTP routes, query use cases, configuration records, or credentials.
 This means a useful Phase 4.1 cannot safely be an editable dashboard yet. The
-PostgreSQL persistence foundation and queryable history are complete; the next
-required boundary is the API.
+PostgreSQL persistence, queryable history, and the read-only versioned API are
+complete. Phase 4.1 can now consume stable backend read models without reaching
+into infrastructure.
 
 ## Capability Map
 
@@ -81,8 +82,9 @@ deployable as static content.
 2. **3.4 Execution history (complete):** append-only transition events,
    existing stage-attempt counts, keyset-paginated run-list queries, and safe
    run-detail DTOs.
-3. **3.5 API contracts:** FastAPI routes for existing safe actions, typed
-   schemas, API tests, and no browser-visible secrets.
+3. **3.5 API contracts (complete):** FastAPI liveness/readiness, run-list,
+   run-detail, and fixed-workflow metadata routes with Pydantic schemas,
+   configurable local CORS, and no browser-visible secrets.
 4. **4.1 Admin foundation:** separate Vite workspace, application shell,
    navigation, authenticated API client, query/error states, and local service
    composition. Only pages backed by the API ship.

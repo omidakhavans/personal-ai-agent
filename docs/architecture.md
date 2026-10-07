@@ -271,6 +271,24 @@ objects. Its newest-first keyset cursor uses `created_at` plus `run_id`; this is
 more stable than offset pagination when new runs arrive while an operator is
 browsing history.
 
+## HTTP Transport
+
+FastAPI is a transport adapter around `RunHistoryApplicationService` and
+`RuntimeMetadataApplicationService`. Routes map Pydantic request/response
+schemas to application DTOs. They do not import ORM entities, create database
+sessions, reconstruct the workflow, or construct a model provider.
+
+The initial versioned API is intentionally read-only. It offers liveness,
+database readiness, run pages, run details with their complete current event
+timeline, and the fixed content-workflow definition. The current CLI start
+command is synchronous and relies on local private inputs, so there is no fake
+HTTP start, cancel, or retry endpoint.
+
+The API is appropriate for local development only until authentication and
+remote deployment policy exist. CORS uses explicit origins and does not permit
+credentials. It never returns filesystem paths, private resume configuration,
+provider secrets, artifact bytes, or raw exception details.
+
 ## Code Quality Boundaries
 
 The repository uses linting, type checking, behavioral tests, and static

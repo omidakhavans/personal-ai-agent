@@ -1,0 +1,50 @@
+---
+title: Runtime API
+description: The read-only, versioned HTTP boundary for durable run history.
+---
+
+The runtime API is a FastAPI transport adapter. It calls application services
+that already own run queries; it does not query ORM models, inspect artifact
+directories, construct model providers, or recreate orchestration rules.
+
+## Start locally
+
+After applying migrations to PostgreSQL, configure a database URL and run:
+
+```bash
+export PERSONAL_AI_AGENT_DATABASE_URL="postgresql+psycopg://<user>:<password>@<host>/<database>"
+uvicorn personal_ai_agent.api.app:app --reload
+```
+
+OpenAPI is generated at `/openapi.json`, with interactive development docs at
+`/docs`.
+
+## Available routes
+
+| Route | Meaning |
+| --- | --- |
+| `GET /api/v1/health` | The process is alive. It does not depend on PostgreSQL or a model provider. |
+| `GET /api/v1/ready` | PostgreSQL can answer the run-history reads needed by the API. |
+| `GET /api/v1/runs` | Newest-first keyset-paginated run summaries. |
+| `GET /api/v1/runs/{run_id}` | A safe run detail with stage checkpoints and ordered events. |
+| `GET /api/v1/workflows` | The fixed content workflow definition. |
+
+`/runs` supports only the filters the query layer already owns: `status`,
+`created_after`, `created_before`, `limit`, and `cursor`. The cursor is opaque;
+the browser returns it unchanged to request the next page.
+
+There is no separate events endpoint yet. Events are bounded by the current
+run-detail response and have no independent pagination requirement.
+
+## Security boundary
+
+The API is for localhost/development use until authentication and remote
+deployment policy exist. It must not be exposed publicly without an
+authenticated reverse proxy or a later application-auth layer.
+
+CORS defaults to the explicit local React origin `http://localhost:5173` and
+does not allow credentials. Configure additional local origins with
+`PERSONAL_AI_AGENT_CORS_ORIGINS`.
+
+Responses never include private resume inputs, local filesystem paths, artifact
+contents, model-provider credentials, raw request headers, or exception traces.

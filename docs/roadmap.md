@@ -74,7 +74,7 @@ implementation.
 
 ## Phase 3: Production-Style Agent Platform
 
-Status: In progress. Milestones 3.1 through 3.4 are complete.
+Status: In progress. Milestones 3.1 through 3.5 are complete.
 
 ### Goal
 
@@ -179,11 +179,14 @@ continues to run the existing CLI workflow unchanged.
 
 #### 3.5 API And Typed Contracts
 
-Status: Planned.
+Status: Complete.
 
-Add a FastAPI interface for starting, inspecting, validating, approving, and
-resuming runs. Use Pydantic v2 at the interface boundary. The CLI becomes a
-client of the same application use cases rather than a separate workflow.
+The FastAPI adapter now exposes versioned, read-only endpoints for liveness,
+readiness, keyset-paginated run history, run details including their timeline,
+and fixed workflow metadata. Pydantic schemas map the application DTOs rather
+than ORM rows. The current synchronous CLI command needs local private inputs,
+so run creation, cancellation, and retry are deliberately deferred instead of
+pretending to offer safe HTTP commands.
 
 #### 3.6 Operator Control Plane
 
@@ -248,23 +251,22 @@ search; it is not a default platform dependency.
 
 ## Next Phase 3 Implementation Task
 
-**Implement Milestone 3.5: FastAPI application use cases and typed API
-contracts.**
+**Implement Milestone 4.1: a separate React admin foundation and read-only
+control plane.**
 
 The first pull request should be intentionally narrow:
 
-- add application commands and queries for starting, listing, reading,
-  validating, resuming, and approving runs;
-- use FastAPI and Pydantic only at the HTTP boundary, keeping the DTO/query
-  layer framework-independent;
-- preserve the CLI workflow and make it a caller of the same application use
-  cases where practical; and
-- define authentication, authorization, and artifact-read policy before
-  exposing a remote operator endpoint.
+- create a separate Vite, React, and TypeScript workspace that consumes the
+  versioned API through a typed client;
+- build only dashboard, run-list, run-detail, stage timeline, and workflow
+  metadata views backed by the current read-only API;
+- provide local API/admin composition and safe loading, error, and empty
+  states; and
+- keep the static learning site separate from the control plane.
 
-Do not add a UI, Redis, provider configuration, or publishers in that task.
-The API should expose only the queries and commands that the current platform
-can safely support.
+Do not add mutable provider configuration, credential editing, publishing,
+Redis, or background work in that task. The first control plane stays
+read-only and localhost/development oriented until authentication exists.
 
 ## Phase 4: Admin GUI / Agent Control Plane
 
@@ -279,9 +281,9 @@ create controls with no safe source of truth.
 
 The correct delivery order is:
 
-1. Add tested FastAPI use cases and typed request/response contracts (3.5).
-2. Build the Phase 4.1 Vite admin shell and API client against those contracts.
-3. Add run history/detail, then configuration and integration surfaces only as
+1. Build the Phase 4.1 Vite admin shell and API client against the completed
+   read-only API.
+2. Add run history/detail views, then configuration and integration surfaces only as
    their corresponding backend capabilities exist.
 
 ## Future-Session Handoff

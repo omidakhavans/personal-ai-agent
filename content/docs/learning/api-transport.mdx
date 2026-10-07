@@ -1,0 +1,68 @@
+---
+title: API Transport Adapter
+description: How the runtime exposes stable HTTP contracts without moving workflow logic into routes.
+---
+
+Phase 3.5 adds FastAPI, but FastAPI does not become the runtime. It is one more
+interface adapter, alongside the CLI.
+
+```text
+HTTP request
+  -> FastAPI route and Pydantic schema
+  -> application service
+  -> query service
+  -> PostgreSQL adapter
+```
+
+The route does not import a SQLAlchemy row, create a database session, call a
+model provider, or decide whether a workflow stage can proceed. That keeps the
+same behavior reusable by a future browser, a CLI command, or another transport
+without copying business rules.
+
+## DTO mapping
+
+The query layer returns dataclasses such as `RunListItem` and `RunDetail`.
+FastAPI returns separate Pydantic response schemas. This can feel repetitive,
+but it is a useful boundary: query models can change with application needs and
+HTTP contracts can evolve deliberately without leaking ORM fields.
+
+## Health is not readiness
+
+`/health` says the process can answer a request. It intentionally does not
+fail because PostgreSQL or an optional model provider is unavailable.
+
+`/ready` says the required database query dependency can serve normal API
+reads. A deployment platform can use that distinction to avoid routing traffic
+to a process that started but cannot do its actual job.
+
+## Error translation
+
+Application errors become small HTTP errors in one central place:
+
+- missing run -> `404 run_not_found`
+- malformed keyset cursor -> `400 invalid_cursor`
+- unavailable dependency -> `503 dependency_unavailable`
+
+Unexpected failures are logged on the server and return a generic 500. The API
+does not reveal tracebacks, connection strings, private paths, or provider
+details to a browser.
+
+## Why read-only first
+
+The existing run-start CLI operation is synchronous and needs local private
+repository/resource inputs. Pretending it is an asynchronous HTTP command
+would either block requests for model work or hide an unsafe local-path policy.
+
+So Phase 3.5 exposes only durable reads. The next React control plane can show
+real run status, timelines, and workflow definitions without being invited to
+make unsupported changes.
+
+## CORS and authentication
+
+The API permits the explicit local React development origin by default and
+does not allow credentialed cross-origin requests. That helps local development
+without accidentally becoming a public admin API.
+
+It is still unauthenticated. Before remote deployment, authentication,
+authorization, and a reverse-proxy policy are required. CORS is not an access
+control system.

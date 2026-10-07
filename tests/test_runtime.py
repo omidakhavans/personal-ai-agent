@@ -94,6 +94,20 @@ except ModuleNotFoundError:
 else:
     SQLALCHEMY_AVAILABLE = True
 
+try:
+    from fastapi.testclient import TestClient
+
+    from personal_ai_agent.api.app import create_app
+    from personal_ai_agent.api.dependencies import ApiServices, ApiSettings
+    from personal_ai_agent.application import (
+        RunHistoryApplicationService,
+        RuntimeMetadataApplicationService,
+    )
+except ModuleNotFoundError:
+    FASTAPI_AVAILABLE = False
+else:
+    FASTAPI_AVAILABLE = True
+
 
 class RuntimeTests(unittest.TestCase):
     def test_new_run_creates_directory_and_initializes_state(self) -> None:
@@ -359,6 +373,7 @@ class RuntimeTests(unittest.TestCase):
         """The relational adapter must round-trip the same domain record as files."""
         with TemporaryDirectory() as tmp:
             engine = create_test_engine()
+            self.addCleanup(engine.dispose)
             create_schema_for_tests(engine)
             repository = SqlAlchemyRunRepository(
                 engine=engine,
@@ -391,6 +406,7 @@ class RuntimeTests(unittest.TestCase):
         """The future control plane reads DTOs, never directories or ORM rows."""
         with TemporaryDirectory() as tmp:
             engine = create_test_engine()
+            self.addCleanup(engine.dispose)
             create_schema_for_tests(engine)
             repository = SqlAlchemyRunRepository(engine=engine, artifact_root=Path(tmp) / "artifacts")
             query_service = SqlAlchemyRunQueryService(repository)
@@ -444,6 +460,7 @@ class RuntimeTests(unittest.TestCase):
         """Normal orchestration produces a durable timeline without runtime SQL branches."""
         with TemporaryDirectory() as tmp:
             engine = create_test_engine()
+            self.addCleanup(engine.dispose)
             create_schema_for_tests(engine)
             artifact_root = Path(tmp) / "artifacts"
             repository = SqlAlchemyRunRepository(engine=engine, artifact_root=artifact_root)
@@ -457,6 +474,81 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(event_types[-1], "run.completed")
             self.assertEqual(event_types.count("step.started"), len(WORKFLOW_STAGES))
             self.assertEqual(event_types.count("step.completed"), len(WORKFLOW_STAGES))
+
+    @unittest.skipUnless(
+        SQLALCHEMY_AVAILABLE and FASTAPI_AVAILABLE,
+        "FastAPI and SQLAlchemy are installed in CI and API environments.",
+    )
+    def test_api_translates_safe_run_history_without_persistence_leaks(self) -> None:
+        """HTTP uses query/application DTOs and returns only their safe fields."""
+        with TemporaryDirectory() as tmp:
+            engine = create_test_engine()
+            self.addCleanup(engine.dispose)
+            create_schema_for_tests(engine)
+            repository = SqlAlchemyRunRepository(engine=engine, artifact_root=Path(tmp) / "artifacts")
+            snapshot = RunSnapshot.create(
+                run_id="20261006-130000-1234abcd",
+                subject="API history",
+                inputs={"repository": "local repository: example", "model": "test-model"},
+            )
+            workspace = repository.create(snapshot)
+            snapshot.status = RUN_FAILED
+            snapshot.stages["research-work"].status = STAGE_FAILED
+            snapshot.stages["research-work"].message = "Bearer secret-value-must-not-leak"
+            repository.save(workspace, snapshot)
+            history = RunHistoryApplicationService(SqlAlchemyRunQueryService(repository))
+            services = ApiServices(
+                run_history=history,
+                runtime_metadata=RuntimeMetadataApplicationService(),
+                readiness=lambda: True,
+            )
+            app = create_app(
+                settings=ApiSettings(None, Path(tmp) / "artifacts", ("http://localhost:5173",)),
+                services=services,
+            )
+            client = TestClient(app, raise_server_exceptions=False)
+
+            self.assertEqual(client.get("/api/v1/health").json(), {"status": "ok"})
+            self.assertEqual(client.get("/api/v1/ready").json(), {"status": "ok"})
+            cors = client.options(
+                "/api/v1/runs",
+                headers={
+                    "Origin": "http://localhost:5173",
+                    "Access-Control-Request-Method": "GET",
+                },
+            )
+            self.assertEqual(cors.headers["access-control-allow-origin"], "http://localhost:5173")
+            listing = client.get("/api/v1/runs?status=failed")
+            self.assertEqual(listing.status_code, 200)
+            self.assertEqual(listing.json()["items"][0]["run_id"], snapshot.run_id)
+            self.assertEqual(client.get("/api/v1/runs?cursor=not-a-cursor").status_code, 400)
+            self.assertEqual(client.get("/api/v1/runs/missing").status_code, 404)
+
+            detail = client.get(f"/api/v1/runs/{snapshot.run_id}")
+            self.assertEqual(detail.status_code, 200)
+            detail_text = detail.text
+            self.assertNotIn("secret-value-must-not-leak", detail_text)
+            self.assertNotIn(str(Path(tmp)), detail_text)
+            self.assertNotIn("private_config", detail_text)
+            failed_stage = next(
+                stage for stage in detail.json()["stages"] if stage["name"] == "research-work"
+            )
+            self.assertEqual(failed_stage["message"], "Bearer [REDACTED_TOKEN]")
+            self.assertIn("[REDACTED_TOKEN]", detail_text)
+            self.assertEqual(client.get("/api/v1/workflows").json()["items"][0]["workflow_id"], "content")
+            self.assertIn("/api/v1/runs", client.get("/openapi.json").json()["paths"])
+
+            not_ready_app = create_app(
+                settings=ApiSettings(None, Path(tmp) / "artifacts", ("http://localhost:5173",)),
+                services=ApiServices(
+                    run_history=history,
+                    runtime_metadata=RuntimeMetadataApplicationService(),
+                    readiness=lambda: False,
+                ),
+            )
+            not_ready = TestClient(not_ready_app, raise_server_exceptions=False).get("/api/v1/ready")
+            self.assertEqual(not_ready.status_code, 503)
+            self.assertEqual(not_ready.json()["code"], "dependency_unavailable")
 
     def test_cli_model_limits_are_validated_and_resume_can_reuse_them(self) -> None:
         parser = build_parser()
