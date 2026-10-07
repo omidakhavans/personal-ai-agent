@@ -74,7 +74,8 @@ implementation.
 
 ## Phase 3: Production-Style Agent Platform
 
-Status: In progress. Milestones 3.1 through 3.5 are complete.
+Status: In progress. Milestones 3.1 through 3.5 and Phase 4.1/4.2 local
+control-plane packaging are complete.
 
 ### Goal
 
@@ -190,12 +191,14 @@ pretending to offer safe HTTP commands.
 
 #### 3.6 Operator Control Plane
 
-Status: Planned.
+Status: Foundation complete through Phase 4.2.
 
-Create a separate Vite, React, TypeScript, shadcn/ui, and TanStack-based admin
-application. Start with run history, run detail, stage timeline, artifacts,
-and approval actions. Do not repurpose the static learning site as an admin
-application.
+A separate Vite, React, and TypeScript control plane now reads dashboard
+history, run details, stage checkpoints, timeline events, and fixed workflow
+metadata from the versioned FastAPI API. It is intentionally read-only: no
+authentication, run commands, artifact viewer, approval action, provider
+configuration, or publication capability is implied by this first surface.
+The static learning site remains separate from the control plane.
 
 #### 3.7 Model, Prompt, Tool, And Credential Configuration
 
@@ -251,26 +254,19 @@ search; it is not a default platform dependency.
 
 ## Next Phase 3 Implementation Task
 
-**Implement Milestone 4.1: a separate React admin foundation and read-only
-control plane.**
+**Phase 4.3 — Provider, Model, And Credential Control Plane.**
 
-The first pull request should be intentionally narrow:
-
-- create a separate Vite, React, and TypeScript workspace that consumes the
-  versioned API through a typed client;
-- build only dashboard, run-list, run-detail, stage timeline, and workflow
-  metadata views backed by the current read-only API;
-- provide local API/admin composition and safe loading, error, and empty
-  states; and
-- keep the static learning site separate from the control plane.
-
-Do not add mutable provider configuration, credential editing, publishing,
-Redis, or background work in that task. The first control plane stays
-read-only and localhost/development oriented until authentication exists.
+The local topology and read-only control plane are now stable enough to add the
+next missing application boundary: a provider/model configuration port with
+credential *references*, never raw values exposed through the API or browser.
+This should begin with one configured model per stage or workflow, explicit
+validation, audit records, and an authenticated write policy. Do not add a
+worker, Redis, or publishing integration in that task; those need a real
+asynchronous execution or external-action use case.
 
 ## Phase 4: Admin GUI / Agent Control Plane
 
-Status: Planned; implementation begins after the Phase 3 API prerequisites.
+Status: Phase 4.1 and Phase 4.2 complete; later operator capabilities remain planned.
 See [Phase 4 Admin Plan](phase-4-admin-plan.md).
 
 Phase 4 is a separate operator application, not an extension of the static
@@ -279,12 +275,22 @@ database query API, configurable providers, credential store, tool registry,
 or publishing adapter. Building editable dashboard pages now would therefore
 create controls with no safe source of truth.
 
-The correct delivery order is:
+### Phase 4.1 — React Admin Foundation + Read-Only Control Plane
 
-1. Build the Phase 4.1 Vite admin shell and API client against the completed
-   read-only API.
-2. Add run history/detail views, then configuration and integration surfaces only as
-   their corresponding backend capabilities exist.
+Status: Complete.
+
+The `admin/` Vite workspace consumes only the FastAPI OpenAPI-facing API. It
+contains dashboard, run list, run detail, stage timeline, and workflow pages,
+with typed response parsing, loading/error/empty states, and no mutable actions.
+
+### Phase 4.2 — Local Runtime Package + Developer Control Plane
+
+Status: Complete.
+
+`compose.yml`, the root `Makefile`, named PostgreSQL/artifact volumes, health
+checks, migration-before-API startup, and local operations documentation run
+the actual stack: PostgreSQL, FastAPI, React admin, and learning site. No
+placeholder Redis, worker, model service, or publisher was added.
 
 ## Future-Session Handoff
 

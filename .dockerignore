@@ -1,0 +1,13 @@
+.env
+.git
+.github
+.next
+out
+runs
+node_modules
+admin/node_modules
+admin/dist
+__pycache__
+*.pyc
+.mypy_cache
+.ruff_cache

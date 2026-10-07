@@ -1,0 +1,23 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+RUN useradd --create-home --uid 10001 appuser
+
+COPY pyproject.toml README.md alembic.ini ./
+COPY alembic ./alembic
+COPY personal_ai_agent ./personal_ai_agent
+COPY tests ./tests
+RUN python -m pip install ".[dev]"
+
+COPY docker/api-entrypoint.sh /usr/local/bin/personal-ai-agent-api
+RUN chmod 0555 /usr/local/bin/personal-ai-agent-api \
+    && mkdir -p /var/lib/personal-ai-agent/artifacts \
+    && chown -R appuser:appuser /app /var/lib/personal-ai-agent
+
+USER appuser
+EXPOSE 8000
+ENTRYPOINT ["/usr/local/bin/personal-ai-agent-api"]

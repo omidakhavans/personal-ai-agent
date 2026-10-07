@@ -1,8 +1,8 @@
 # Personal AI Agent
 
 Phase 2 of the Personal Applied AI Engineering project. Phase 2 is complete;
-the repository now also contains the plan for a deliberately incremental
-Phase 3 platform evolution.
+Phase 3 now includes durable PostgreSQL history, a read-only FastAPI layer, a
+read-only React control plane, and a repeatable local development package.
 
 This repository starts rebuilding the Phase 1 Content Agent outside Codex. Phase 1 lives in `tech-content-agent` and acts as the behavioral reference implementation. This repo implements the first small piece of our own runtime.
 
@@ -12,12 +12,27 @@ Phase 2 now has real, LLM-powered research, evidence-context, blog-writing,
 review, LinkedIn, and X stages. Social transformations require a recorded human
 approval after the evidence-aware blog review passes.
 
-Phase 3.2 is complete: the runtime now uses typed run and stage snapshots plus
-repository and artifact ports, while the original JSON/filesystem implementation
-remains the active adapter. It does not yet add PostgreSQL, an API, an operator
-UI, background jobs, credentials, or publishing integrations. The next task is
-the PostgreSQL persistence adapter. Read the [roadmap](docs/roadmap.md) and
-[Phase 3 platform plan](docs/phase-3-platform-plan.md) before starting it.
+The implemented local stack contains PostgreSQL, FastAPI, the React control
+plane, and the learning site. It does not contain Redis, a worker, a model
+provider service, credentials, or publishing integrations because none is
+required by the current runtime. Read the [roadmap](docs/roadmap.md),
+[Phase 4 plan](docs/phase-4-admin-plan.md), and
+[local development guide](docs/local-development.md) before extending it.
+
+## Run The Local Stack
+
+Docker Desktop and Compose v2 are required.
+
+```bash
+cp .env.example .env
+make local-up
+```
+
+This starts the read-only control plane at `http://localhost:5173`, FastAPI and
+OpenAPI at `http://localhost:8000/docs`, and the learning site at
+`http://localhost:3000`. Use `make local-status`, `make local-logs`, and
+`make local-down` for normal operations. `make local-reset CONFIRM=reset`
+deletes the local database and artifact volumes.
 
 The runtime lifecycle was validated first with placeholder stages. It now has
 eight real stages, including an explicit human approval pause:

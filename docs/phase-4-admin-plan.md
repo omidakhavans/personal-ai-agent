@@ -67,12 +67,13 @@ Vite React operator UI
   -> PostgreSQL / artifact store / provider and publisher adapters
 ```
 
-The UI will use React, TypeScript, Vite, shadcn/ui, TanStack Query, React Hook
-Form, and Zod after stable API schemas exist. Generated or manually maintained
-types must derive from the API contract, not duplicate backend business rules.
-The development composition will add a database, API, and admin service only
-when those services exist; the documentation site stays independently
-deployable as static content.
+The implemented UI uses React, TypeScript, Vite, TanStack Query, Zod, and a
+small handwritten typed API client. It intentionally does not add a component
+framework or form system before there are editable commands. Response parsing
+is a client-side boundary check, not a duplicate of backend business rules.
+The local composition includes the database, API, admin, and learning site
+because all four exist. The documentation site remains independently deployable
+as static content.
 
 ## Milestones And Pull Requests
 
@@ -85,22 +86,35 @@ deployable as static content.
 3. **3.5 API contracts (complete):** FastAPI liveness/readiness, run-list,
    run-detail, and fixed-workflow metadata routes with Pydantic schemas,
    configurable local CORS, and no browser-visible secrets.
-4. **4.1 Admin foundation:** separate Vite workspace, application shell,
-   navigation, authenticated API client, query/error states, and local service
-   composition. Only pages backed by the API ship.
-5. **4.2 Runs:** dashboard, run list, stage timeline, artifact viewer, and
-   approval actions.
-6. **4.3 Configuration:** providers, models, workflows, tools, and prompts as
+4. **4.1 React admin foundation + read-only control plane (complete):** separate
+   Vite workspace, application shell, typed API client, query/error states,
+   dashboard, run list, detail/timeline, and workflows. Authentication is not
+   claimed; this is localhost-only and read-only.
+5. **4.2 Local runtime package + developer control plane (complete):** Compose,
+   Make targets, migrations-before-API startup, health checks, durable local
+   volumes, and documentation for the actual PostgreSQL/API/admin/docs stack.
+6. **4.3 Provider, model, and credential control plane:** providers, models,
+   workflows, tools, and prompts as
    versioned backend resources.
 7. **4.4 Integrations and publishing:** credential references, publication
    records, explicit confirmations, retries, and audit visibility.
 
 ## Phase 4.1 Page Plan
 
-The eventual shell will reserve navigation for Dashboard, Runs, Agents,
-Workflows, Tools, Prompts, Providers, Integrations, and Settings. At launch it
-will expose only Dashboard and Runs if the API supports them; unsupported
-sections remain absent rather than appearing as non-functional controls.
+The implemented shell exposes Dashboard, Runs, and Workflows because those are
+backed by the API. It intentionally omits Agents, Tools, Prompts, Providers,
+Integrations, and Settings rather than showing non-functional controls. The
+dashboard, runs page, run detail page, stage timeline, and workflow page are
+all read models. Artifact bytes and approval actions remain absent because the
+backend does not safely support them yet.
+
+## Local Package
+
+Phase 4.2 standardizes development around `make local-up`, `make local-down`,
+`make local-status`, `make local-logs`, and `make local-check`. PostgreSQL and
+artifacts use named volumes; normal shutdown preserves them, and the reset
+target requires explicit destructive confirmation. The API runs Alembic before
+serving, so readiness is not reported against an outdated schema.
 
 ## Learning Note
 

@@ -1,0 +1,51 @@
+---
+title: Packaging The Local Runtime
+description: Why the control plane and its dependencies are composed as a small local stack.
+---
+
+Phase 4.2 packages the real pieces of the agent into one local development
+experience. The package is intentionally a topology, not a claim that every
+future subsystem already exists.
+
+```text
+PostgreSQL <- FastAPI <- React control plane
+                    <- learning site (separate reader experience)
+```
+
+The database holds durable workflow state and event history. The API translates
+that state into safe read models. The React application renders those models.
+The learning site remains separate because reading about the runtime should not
+give a browser administrative access.
+
+## Why Compose And Make?
+
+Docker Compose gives the services a repeatable network, health checks, and
+persistent volumes. The Makefile gives people one simple set of commands for
+starting, checking, stopping, resetting, migrating, and testing the stack.
+Neither replaces the runtime's application architecture: they operate it.
+
+## What Is Not In The Stack?
+
+There is no Redis, queue worker, Ollama service, model-provider container, or
+publisher. Adding an unused service makes a diagram look more complete while
+making a real local system less understandable. A future background worker is
+justified only when API-driven work cannot safely run inside one request. A
+future provider adapter is justified only when provider configuration and
+credential references have a proper domain boundary.
+
+## The Migration Gate
+
+The API image runs Alembic migrations before starting Uvicorn. That keeps a
+developer from seeing an apparently healthy API backed by an outdated schema.
+The readiness endpoint then executes a small read-only database check. This is
+ordinary deployment engineering, but it matters especially to agent systems:
+durable workflow state must be trustworthy before an operator can make sense of
+the work history.
+
+## Try It
+
+1. Copy `.env.example` to `.env` and choose a local-only database password.
+2. Run `make local-up`.
+3. Visit the control plane and compare a run detail with the OpenAPI response.
+4. Run `make local-status`, then `make local-down`.
+5. Read `docs/local-development.md` before using the destructive reset command.

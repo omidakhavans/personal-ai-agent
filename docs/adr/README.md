@@ -12,3 +12,4 @@ guide future work without pretending that unbuilt platform details are settled.
 3. [ADR 0003: Human-approved publishing and credential boundaries](0003-human-approved-publishing-and-credentials.md)
 4. [ADR 0004: Build a typed API before the admin control plane](0004-api-before-admin-control-plane.md)
 5. [ADR 0005: Keep snapshots and event history distinct](0005-snapshot-and-event-history.md)
+6. [ADR 0006: Use Make as the canonical local operations interface](0006-canonical-local-operations.md)

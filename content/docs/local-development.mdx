@@ -1,0 +1,40 @@
+---
+title: Local Runtime
+description: Run the implemented agent services together on a local machine.
+---
+
+The local runtime package contains the services that are genuinely implemented:
+PostgreSQL, the FastAPI read API, the read-only React control plane, and this
+learning site. It does not contain a worker, Redis, a model provider, or a
+publisher because the current runtime does not require them.
+
+```bash
+cp .env.example .env
+make local-up
+```
+
+Once ready, use the control plane at `http://localhost:5173`, OpenAPI at
+`http://localhost:8000/docs`, and this site at `http://localhost:3000`.
+
+The control plane is deliberately read-only: it presents run history, stage
+checkpoints, event timelines, and workflow definitions through FastAPI. It is
+not allowed to access PostgreSQL directly or to bypass the runtime's approval
+and publishing boundaries.
+
+## Everyday Commands
+
+```bash
+make local-status
+make local-logs
+make local-down
+make local-check
+make check
+```
+
+`local-down` keeps the database and generated artifacts in named Docker
+volumes. `make local-reset CONFIRM=reset` deletes those volumes, so use it only
+when you mean to discard local development data.
+
+The repository's `docs/local-development.md` contains the detailed operations
+guide, including migrations, health semantics, security boundaries, and future
+local-provider guidance.

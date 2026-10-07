@@ -1,4 +1,4 @@
 {
   "title": "Personal AI Agent",
-  "pages": ["index", "getting-started", "cli-reference", "api", "architecture", "workflow", "learning", "deployment"]
+  "pages": ["index", "getting-started", "local-development", "cli-reference", "api", "architecture", "workflow", "learning", "deployment"]
 }
