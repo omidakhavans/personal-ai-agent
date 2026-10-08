@@ -93,9 +93,10 @@ as static content.
 5. **4.2 Local runtime package + developer control plane (complete):** Compose,
    Make targets, migrations-before-API startup, health checks, durable local
    volumes, and documentation for the actual PostgreSQL/API/admin/docs stack.
-6. **4.3 Provider, model, and credential control plane:** providers, models,
-   workflows, tools, and prompts as
-   versioned backend resources.
+6. **4.3 Provider, model, and credential-reference control plane (complete):**
+   one supported OpenAI Responses provider record, an `env:NAME` credential
+   reference, one model assignment for the content workflow, local token-gated
+   writes, and append-only audit history. It stores no credential value.
 7. **4.4 Integrations and publishing:** credential references, publication
    records, explicit confirmations, retries, and audit visibility.
 
@@ -115,6 +116,15 @@ Phase 4.2 standardizes development around `make local-up`, `make local-down`,
 artifacts use named volumes; normal shutdown preserves them, and the reset
 target requires explicit destructive confirmation. The API runs Alembic before
 serving, so readiness is not reported against an outdated schema.
+
+## Phase 4.3 Boundary
+
+The Model settings page sends only safe provider metadata, an environment
+variable credential reference, and a model name. The local control token is
+held in browser memory for one session; it is not an API key and is never
+stored in the database. This milestone does not add generic provider URLs,
+prompt editing, tool editing, encrypted secrets, or browser-launched runs
+because those require their own policy and audit models.
 
 ## Learning Note
 

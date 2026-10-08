@@ -1,9 +1,10 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, BookOpen, ChevronRight, Database, LayoutDashboard, ListFilter, Workflow } from "lucide-react";
+import { Activity, BookOpen, ChevronRight, Database, LayoutDashboard, ListFilter, Settings2, Workflow } from "lucide-react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError, getRun, listRuns, listWorkflows, type RunListItem } from "./api";
+import { ModelSettingsPage } from "./model-settings";
 
 const statuses = ["", "pending", "running", "completed", "blocked", "failed", "awaiting_approval"];
 const docsUrl = import.meta.env.VITE_DOCS_URL || "http://localhost:3000";
@@ -20,6 +21,7 @@ export function App() {
           <NavLink to="/" icon={<LayoutDashboard size={17} />} label="Overview" />
           <NavLink to="/runs" icon={<Database size={17} />} label="Runs" />
           <NavLink to="/workflows" icon={<Workflow size={17} />} label="Workflows" />
+          <NavLink to="/model-settings" icon={<Settings2 size={17} />} label="Model settings" />
         </nav>
         <div className="sidebar-note">
           <span className="eyebrow">Control plane</span>
@@ -33,6 +35,7 @@ export function App() {
           <Route path="/runs" element={<RunsPage />} />
           <Route path="/runs/:runId" element={<RunDetailPage />} />
           <Route path="/workflows" element={<WorkflowsPage />} />
+          <Route path="/model-settings" element={<ModelSettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

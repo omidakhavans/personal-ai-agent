@@ -38,6 +38,11 @@ from sqlalchemy.orm import (
 )
 from sqlalchemy.pool import StaticPool
 
+from .configuration import (
+    ConfigurationAuditEvent,
+    ProviderConfiguration,
+    WorkflowModelConfiguration,
+)
 from .domain import ArtifactReference, RunSnapshot, RunStatus, StageSnapshot, utc_now
 from .persistence import RunWorkspace
 from .privacy import redact_sensitive_text
@@ -115,6 +120,47 @@ class RunEventRow(Base):
     schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     run: Mapped[RunRow] = relationship(back_populates="events")
+
+
+class ProviderConfigurationRow(Base):
+    """Persisted provider metadata with a reference, never a credential value."""
+
+    __tablename__ = "provider_configurations"
+
+    provider_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    provider_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    credential_reference: Mapped[str] = mapped_column(String(160), nullable=False)
+    enabled: Mapped[bool] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class WorkflowModelConfigurationRow(Base):
+    """Persisted one-model assignment for a workflow."""
+
+    __tablename__ = "workflow_model_configurations"
+
+    workflow_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    provider_id: Mapped[str] = mapped_column(
+        ForeignKey("provider_configurations.provider_id"), nullable=False
+    )
+    model: Mapped[str] = mapped_column(String(160), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ConfigurationAuditEventRow(Base):
+    """Append-only audit record for authenticated configuration mutations."""
+
+    __tablename__ = "configuration_audit_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    resource_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    resource_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    actor: Mapped[str] = mapped_column(String(80), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    summary: Mapped[str] = mapped_column(String(255), nullable=False)
 
 
 def create_test_engine() -> Engine:
@@ -515,6 +561,109 @@ class SqlAlchemyRunQueryService(RunQueryService):
             schema_version=event.schema_version,
             payload=_safe_event_payload(event.payload),
         )
+
+
+class SqlAlchemyConfigurationRepository:
+    """Store safe control-plane configuration records using the runtime database."""
+
+    def __init__(self, repository: SqlAlchemyRunRepository) -> None:
+        """Reuse the established engine/session configuration without new wiring paths."""
+        self._repository = repository
+
+    def list_providers(self) -> tuple[ProviderConfiguration, ...]:
+        """Return provider records in a stable operator-friendly order."""
+        with self._repository._sessions() as session:
+            rows = session.scalars(select(ProviderConfigurationRow).order_by(ProviderConfigurationRow.provider_id))
+            return tuple(self._provider_from_row(row) for row in rows)
+
+    def get_provider(self, provider_id: str) -> ProviderConfiguration | None:
+        """Look up one provider for assignment validation."""
+        with self._repository._sessions() as session:
+            row = session.get(ProviderConfigurationRow, provider_id)
+            return self._provider_from_row(row) if row else None
+
+    def save_provider(self, provider: ProviderConfiguration, *, actor: str) -> ProviderConfiguration:
+        """Upsert a provider and atomically append its audit record."""
+        with self._repository._sessions.begin() as session:
+            row = session.get(ProviderConfigurationRow, provider.provider_id)
+            action = "provider.created" if row is None else "provider.updated"
+            if row is None:
+                row = ProviderConfigurationRow(provider_id=provider.provider_id)
+                session.add(row)
+            row.display_name = provider.display_name
+            row.provider_type = provider.provider_type
+            row.credential_reference = provider.credential_reference
+            row.enabled = provider.enabled
+            row.created_at = provider.created_at
+            row.updated_at = provider.updated_at
+            self._append_audit(
+                session, action=action, resource_type="provider", resource_id=provider.provider_id,
+                actor=actor, occurred_at=provider.updated_at,
+                summary=f"Provider {provider.provider_id} {action.rsplit('.', 1)[1]}.",
+            )
+        return provider
+
+    def list_workflow_models(self) -> tuple[WorkflowModelConfiguration, ...]:
+        """Return one model configuration per configured workflow."""
+        with self._repository._sessions() as session:
+            rows = session.scalars(select(WorkflowModelConfigurationRow).order_by(WorkflowModelConfigurationRow.workflow_id))
+            return tuple(self._workflow_model_from_row(row) for row in rows)
+
+    def save_workflow_model(self, configuration: WorkflowModelConfiguration, *, actor: str) -> WorkflowModelConfiguration:
+        """Upsert an assignment and append a non-sensitive audit event."""
+        with self._repository._sessions.begin() as session:
+            row = session.get(WorkflowModelConfigurationRow, configuration.workflow_id)
+            action = "workflow_model.created" if row is None else "workflow_model.updated"
+            if row is None:
+                row = WorkflowModelConfigurationRow(workflow_id=configuration.workflow_id)
+                session.add(row)
+            row.provider_id = configuration.provider_id
+            row.model = configuration.model
+            row.updated_at = configuration.updated_at
+            self._append_audit(
+                session, action=action, resource_type="workflow_model", resource_id=configuration.workflow_id,
+                actor=actor, occurred_at=configuration.updated_at,
+                summary=f"Model assignment for {configuration.workflow_id} {action.rsplit('.', 1)[1]}.",
+            )
+        return configuration
+
+    def list_audit_events(self, *, limit: int) -> tuple[ConfigurationAuditEvent, ...]:
+        """Return newest-first configuration history with no credential content."""
+        with self._repository._sessions() as session:
+            rows = session.scalars(select(ConfigurationAuditEventRow).order_by(ConfigurationAuditEventRow.id.desc()).limit(limit))
+            return tuple(
+                ConfigurationAuditEvent(
+                    sequence=row.id, action=row.action, resource_type=row.resource_type,
+                    resource_id=row.resource_id, actor=row.actor,
+                    occurred_at=_normalize_datetime(row.occurred_at), summary=row.summary,
+                )
+                for row in rows
+            )
+
+    @staticmethod
+    def _provider_from_row(row: ProviderConfigurationRow) -> ProviderConfiguration:
+        """Map an ORM provider row to a transport-neutral application record."""
+        return ProviderConfiguration(
+            provider_id=row.provider_id, display_name=row.display_name, provider_type=row.provider_type,
+            credential_reference=row.credential_reference, enabled=row.enabled,
+            created_at=_normalize_datetime(row.created_at), updated_at=_normalize_datetime(row.updated_at),
+        )
+
+    @staticmethod
+    def _workflow_model_from_row(row: WorkflowModelConfigurationRow) -> WorkflowModelConfiguration:
+        """Map a workflow-model row to its storage-neutral application record."""
+        return WorkflowModelConfiguration(
+            workflow_id=row.workflow_id, provider_id=row.provider_id, model=row.model,
+            updated_at=_normalize_datetime(row.updated_at),
+        )
+
+    @staticmethod
+    def _append_audit(session: Any, *, action: str, resource_type: str, resource_id: str, actor: str, occurred_at: datetime, summary: str) -> None:
+        """Append an audit row; callers never supply secret-bearing payloads."""
+        session.add(ConfigurationAuditEventRow(
+            action=action, resource_type=resource_type, resource_id=resource_id,
+            actor=actor, occurred_at=occurred_at, summary=summary,
+        ))
 
 
 def _safe_event_payload(value: dict[str, Any]) -> dict[str, Any]:

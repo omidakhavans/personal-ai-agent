@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from ..application import RunNotFoundError
+from ..configuration import ConfigurationError, ConfigurationNotFoundError
 from ..run_queries import InvalidRunCursorError
 
 logger = logging.getLogger(__name__)
@@ -15,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 class ApiDependencyUnavailableError(RuntimeError):
     """A required API dependency has not been configured or is unreachable."""
+
+
+class ApiAuthorizationError(PermissionError):
+    """A write request did not present the configured local control token."""
 
 
 def install_error_handlers(app: FastAPI) -> None:
@@ -31,6 +36,18 @@ def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiDependencyUnavailableError)
     async def dependency_unavailable(_: Request, __: ApiDependencyUnavailableError) -> JSONResponse:
         return _error_response(503, "dependency_unavailable", "The requested service is unavailable.")
+
+    @app.exception_handler(ApiAuthorizationError)
+    async def unauthorized(_: Request, __: ApiAuthorizationError) -> JSONResponse:
+        return _error_response(401, "configuration_unauthorized", "Configuration authorization failed.")
+
+    @app.exception_handler(ConfigurationNotFoundError)
+    async def configuration_not_found(_: Request, __: ConfigurationNotFoundError) -> JSONResponse:
+        return _error_response(404, "configuration_not_found", "The requested configuration was not found.")
+
+    @app.exception_handler(ConfigurationError)
+    async def invalid_configuration(_: Request, exc: ConfigurationError) -> JSONResponse:
+        return _error_response(422, "invalid_configuration", str(exc))
 
     @app.exception_handler(Exception)
     async def unexpected_error(request: Request, exc: Exception) -> JSONResponse:

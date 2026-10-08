@@ -514,10 +514,12 @@ class RuntimeTests(unittest.TestCase):
                 "/api/v1/runs",
                 headers={
                     "Origin": "http://localhost:5173",
-                    "Access-Control-Request-Method": "GET",
+                    "Access-Control-Request-Method": "PUT",
+                    "Access-Control-Request-Headers": "X-Admin-Token",
                 },
             )
             self.assertEqual(cors.headers["access-control-allow-origin"], "http://localhost:5173")
+            self.assertIn("PUT", cors.headers["access-control-allow-methods"])
             listing = client.get("/api/v1/runs?status=failed")
             self.assertEqual(listing.status_code, 200)
             self.assertEqual(listing.json()["items"][0]["run_id"], snapshot.run_id)
@@ -577,6 +579,67 @@ class RuntimeTests(unittest.TestCase):
         )
 
         self.assertEqual(reused, selected)
+
+    @unittest.skipUnless(
+        SQLALCHEMY_AVAILABLE and FASTAPI_AVAILABLE,
+        "FastAPI and SQLAlchemy are installed in CI and API environments.",
+    )
+    def test_configuration_api_requires_a_token_and_records_safe_audit_history(self) -> None:
+        """Provider configuration never accepts values as credentials or skips audit history."""
+        from personal_ai_agent.configuration import ConfigurationApplicationService
+        from personal_ai_agent.postgres import SqlAlchemyConfigurationRepository
+
+        with TemporaryDirectory() as tmp:
+            engine = create_test_engine()
+            self.addCleanup(engine.dispose)
+            create_schema_for_tests(engine)
+            repository = SqlAlchemyRunRepository(engine=engine, artifact_root=Path(tmp) / "artifacts")
+            services = ApiServices(
+                run_history=RunHistoryApplicationService(SqlAlchemyRunQueryService(repository)),
+                runtime_metadata=RuntimeMetadataApplicationService(),
+                readiness=lambda: True,
+                configuration=ConfigurationApplicationService(SqlAlchemyConfigurationRepository(repository)),
+            )
+            app = create_app(
+                settings=ApiSettings(None, Path(tmp) / "artifacts", ("http://localhost:5173",), "local-token"),
+                services=services,
+            )
+            client = TestClient(app, raise_server_exceptions=False)
+            body = {"display_name": "OpenAI", "credential_reference": "env:OPENAI_API_KEY", "enabled": True}
+            self.assertEqual(client.put("/api/v1/configuration/providers/openai", json=body).status_code, 401)
+            created = client.put(
+                "/api/v1/configuration/providers/openai", json=body,
+                headers={"X-Admin-Token": "local-token"},
+            )
+            self.assertEqual(created.status_code, 200)
+            self.assertNotIn("secret", created.text.lower())
+            assignment = client.put(
+                "/api/v1/configuration/workflow-models/content",
+                json={"provider_id": "openai", "model": "gpt-4.1-mini"},
+                headers={"X-Admin-Token": "local-token"},
+            )
+            self.assertEqual(assignment.status_code, 200)
+            audit = client.get("/api/v1/configuration/audit-events")
+            self.assertEqual(audit.status_code, 200)
+            self.assertEqual(len(audit.json()["items"]), 2)
+            self.assertNotIn("OPENAI_API_KEY", audit.text)
+
+    def test_provider_factory_resolves_a_reference_only_at_execution_time(self) -> None:
+        """The CLI composition boundary accepts references and keeps values out of records."""
+        from personal_ai_agent.provider_runtime import (
+            ModelClientFactory,
+            ProviderRuntimeConfiguration,
+        )
+
+        with patch.dict(os.environ, {"TEST_PROVIDER_KEY": "not-persisted"}):
+            client = ModelClientFactory().create(
+                ProviderRuntimeConfiguration("openai_responses", "env:TEST_PROVIDER_KEY"),
+                timeout_seconds=30,
+                max_attempts=2,
+                max_output_tokens=400,
+            )
+        self.assertIsInstance(client, OpenAIResponsesClient)
+        self.assertEqual(client.api_key, "not-persisted")
 
 
 class FakeModelClient:

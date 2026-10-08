@@ -11,18 +11,31 @@ from ..application import (
     RunHistoryApplicationService,
     RuntimeMetadataApplicationService,
 )
+from ..configuration import (
+    ConfigurationApplicationService,
+    ProviderConfiguration,
+    WorkflowModelConfiguration,
+)
 from ..domain import RunStatus
 from ..run_queries import RunListFilters
-from .dependencies import ApiServices, get_services
+from .dependencies import ApiServices, get_services, require_configuration_write
 from .errors import ApiDependencyUnavailableError
 from .schemas import (
+    ConfigurationAuditEventListResponse,
+    ConfigurationAuditEventResponse,
     HealthResponse,
+    ProviderConfigurationListResponse,
+    ProviderConfigurationResponse,
+    ProviderConfigurationWrite,
     RunDetailResponse,
     RunEventResponse,
     RunListItemResponse,
     RunListResponse,
     RunStageResponse,
     WorkflowListResponse,
+    WorkflowModelConfigurationListResponse,
+    WorkflowModelConfigurationResponse,
+    WorkflowModelConfigurationWrite,
     WorkflowResponse,
     WorkflowStageResponse,
 )
@@ -142,6 +155,68 @@ def workflows(services: ApiServices = Depends(get_services)) -> WorkflowListResp
     )
 
 
+@router.get("/configuration/providers", response_model=ProviderConfigurationListResponse)
+def providers(services: ApiServices = Depends(get_services)) -> ProviderConfigurationListResponse:
+    """List safe provider configuration records without revealing credential material."""
+    return ProviderConfigurationListResponse(items=[_provider_response(item) for item in _configuration(services).providers()])
+
+
+@router.put("/configuration/providers/{provider_id}", response_model=ProviderConfigurationResponse)
+def save_provider(
+    provider_id: str,
+    body: ProviderConfigurationWrite,
+    actor: str = Depends(require_configuration_write),
+    services: ApiServices = Depends(get_services),
+) -> ProviderConfigurationResponse:
+    """Save one bounded provider record after explicit local authorization."""
+    saved = _configuration(services).save_provider(
+        provider_id=provider_id,
+        display_name=body.display_name,
+        credential_reference=body.credential_reference,
+        enabled=body.enabled,
+        actor=actor,
+    )
+    return _provider_response(saved)
+
+
+@router.get("/configuration/workflow-models", response_model=WorkflowModelConfigurationListResponse)
+def workflow_models(services: ApiServices = Depends(get_services)) -> WorkflowModelConfigurationListResponse:
+    """List the current one-model-per-workflow assignments."""
+    return WorkflowModelConfigurationListResponse(items=[_workflow_model_response(item) for item in _configuration(services).workflow_models()])
+
+
+@router.put("/configuration/workflow-models/{workflow_id}", response_model=WorkflowModelConfigurationResponse)
+def save_workflow_model(
+    workflow_id: str,
+    body: WorkflowModelConfigurationWrite,
+    actor: str = Depends(require_configuration_write),
+    services: ApiServices = Depends(get_services),
+) -> WorkflowModelConfigurationResponse:
+    """Assign one enabled provider/model pair to the known workflow."""
+    saved = _configuration(services).save_workflow_model(
+        workflow_id=workflow_id, provider_id=body.provider_id, model=body.model, actor=actor
+    )
+    return _workflow_model_response(saved)
+
+
+@router.get("/configuration/audit-events", response_model=ConfigurationAuditEventListResponse)
+def configuration_audit_events(
+    limit: int = Query(default=50, ge=1, le=100),
+    services: ApiServices = Depends(get_services),
+) -> ConfigurationAuditEventListResponse:
+    """List bounded audit history so edits remain visible and reviewable."""
+    return ConfigurationAuditEventListResponse(
+        items=[
+            ConfigurationAuditEventResponse(
+                sequence=item.sequence, action=item.action, resource_type=item.resource_type,
+                resource_id=item.resource_id, actor=item.actor, occurred_at=item.occurred_at,
+                summary=item.summary,
+            )
+            for item in _configuration(services).audit_events(limit=limit)
+        ]
+    )
+
+
 def _history(services: ApiServices) -> RunHistoryApplicationService:
     """Keep routes visibly dependent on an application service, not persistence."""
     return services.run_history
@@ -150,3 +225,27 @@ def _history(services: ApiServices) -> RunHistoryApplicationService:
 def _metadata(services: ApiServices) -> RuntimeMetadataApplicationService:
     """Keep fixed runtime metadata behind the same application boundary."""
     return services.runtime_metadata
+
+
+def _configuration(services: ApiServices) -> ConfigurationApplicationService:
+    """Require the configuration application service only for its own routes."""
+    if services.configuration is None:
+        raise ApiDependencyUnavailableError("Configuration storage is not ready.")
+    return services.configuration
+
+
+def _provider_response(item: ProviderConfiguration) -> ProviderConfigurationResponse:
+    """Map application records without exposing an ORM row to the transport layer."""
+    return ProviderConfigurationResponse(
+        provider_id=item.provider_id, display_name=item.display_name, provider_type=item.provider_type,
+        credential_reference=item.credential_reference, enabled=item.enabled,
+        created_at=item.created_at, updated_at=item.updated_at,
+    )
+
+
+def _workflow_model_response(item: WorkflowModelConfiguration) -> WorkflowModelConfigurationResponse:
+    """Map a workflow-model application record into the stable HTTP response."""
+    return WorkflowModelConfigurationResponse(
+        workflow_id=item.workflow_id, provider_id=item.provider_id, model=item.model,
+        updated_at=item.updated_at,
+    )

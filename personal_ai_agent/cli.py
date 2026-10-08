@@ -10,9 +10,10 @@ from pathlib import Path
 
 from .approval import SocialApprovalExecutor
 from .evidence_context import EvidenceContextExecutor, EvidenceContextSettings
-from .model_client import OpenAIResponsesClient
+from .model_client import ModelClient
 from .persistence import FileRunRepository
 from .privacy import reference_label, repository_label
+from .provider_runtime import ModelClientFactory, ProviderRuntimeConfiguration
 from .research_resources import ResearchResourcesSettings, ResourceResearchExecutor
 from .research_work import ResearchWorkExecutor, ResearchWorkSettings
 from .review_blog import BlogReviewerExecutor, BlogReviewerSettings
@@ -339,9 +340,15 @@ def build_content_executor(
     """Compose the concrete executors used by the Phase 2 CLI workflow."""
     options = model_options or ModelRuntimeOptions()
 
-    def client(default_max_output_tokens: int) -> OpenAIResponsesClient:
-        """Create a client that shares run limits and preserves stage defaults."""
-        return OpenAIResponsesClient(
+    provider = ProviderRuntimeConfiguration(
+        provider_type="openai_responses", credential_reference="env:OPENAI_API_KEY"
+    )
+    factory = ModelClientFactory()
+
+    def client(default_max_output_tokens: int) -> ModelClient:
+        """Create a stage client through the provider/credential-reference boundary."""
+        return factory.create(
+            provider,
             timeout_seconds=options.timeout_seconds,
             max_attempts=options.max_attempts,
             max_output_tokens=options.max_output_tokens or default_max_output_tokens,

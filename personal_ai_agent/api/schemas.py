@@ -108,3 +108,69 @@ class ErrorResponse(ApiModel):
 
     code: str
     message: str
+
+
+class ProviderConfigurationResponse(ApiModel):
+    """Safe provider metadata; credential references are not credential values."""
+
+    provider_id: str
+    display_name: str
+    provider_type: str
+    credential_reference: str
+    enabled: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProviderConfigurationWrite(ApiModel):
+    """Bounded provider mutation request accepted only with local authorization."""
+
+    display_name: str
+    credential_reference: str
+    enabled: bool = True
+
+
+class ProviderConfigurationListResponse(ApiModel):
+    """List wrapper for the available safe provider records."""
+
+    items: list[ProviderConfigurationResponse]
+
+
+class WorkflowModelConfigurationResponse(ApiModel):
+    """One provider/model selection for an existing workflow."""
+
+    workflow_id: str
+    provider_id: str
+    model: str
+    updated_at: datetime
+
+
+class WorkflowModelConfigurationWrite(ApiModel):
+    """Bounded model assignment request for the current content workflow."""
+
+    provider_id: str
+    model: str
+
+
+class WorkflowModelConfigurationListResponse(ApiModel):
+    """List wrapper for configured workflow model selections."""
+
+    items: list[WorkflowModelConfigurationResponse]
+
+
+class ConfigurationAuditEventResponse(ApiModel):
+    """Safe immutable audit event for configuration changes."""
+
+    sequence: int
+    action: str
+    resource_type: str
+    resource_id: str
+    actor: str
+    occurred_at: datetime
+    summary: str
+
+
+class ConfigurationAuditEventListResponse(ApiModel):
+    """List wrapper for bounded configuration audit history."""
+
+    items: list[ConfigurationAuditEventResponse]

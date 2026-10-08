@@ -34,6 +34,15 @@ OpenAPI at `http://localhost:8000/docs`, and the learning site at
 `make local-down` for normal operations. `make local-reset CONFIRM=reset`
 deletes the local database and artifact volumes.
 
+## Provider And Model Settings
+
+Phase 4.3 adds a local Model settings page. It stores an OpenAI provider record
+and one model assignment for the `content` workflow, but only stores credential
+references such as `env:OPENAI_API_KEY`—never the API key. Set a unique
+`PERSONAL_AI_AGENT_ADMIN_TOKEN` in `.env`, restart the stack, then enter that
+token on the page for a save request. The token is not persisted by the browser
+or API. See [Provider and model configuration](docs/learning/provider-model-configuration.md).
+
 The runtime lifecycle was validated first with placeholder stages. It now has
 eight real stages, including an explicit human approval pause:
 

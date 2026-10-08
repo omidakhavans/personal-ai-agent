@@ -65,8 +65,11 @@ images have been built.
 ## Configuration And Migration Rules
 
 `.env` is local-only and ignored by Git. `.env.example` contains only safe
-placeholder values. Set a unique local database password in `.env`; do not put
-provider credentials there because this package has no provider runtime yet.
+placeholder values. Set a unique local database password and
+`PERSONAL_AI_AGENT_ADMIN_TOKEN` in `.env`. The control token authorizes only
+local configuration writes and must not be reused as a provider key. Provider
+credentials remain outside the database and API; the Phase 4.3 provider record
+stores only a reference such as `env:OPENAI_API_KEY`.
 
 The API container runs `alembic upgrade head` before Uvicorn starts. This is
 safe for the existing forward-only local migrations and guarantees that its
@@ -85,15 +88,20 @@ repository or the documentation site.
 - The admin and learning site health checks request their local HTTP root.
 - `make local-check` waits for all three browser-visible endpoints.
 
-## Future Model Providers
+## Model Provider Boundary
 
-No model service runs in Compose today. When a later provider adapter needs a
-local Ollama instance, prefer running it as an explicitly documented external
-service and configure its base URL through a bounded provider configuration
-boundary. A Linux Docker container cannot use host `localhost` for that; it
-normally needs a host-reachable address such as `host.docker.internal` when the
-environment supports it. Do not add the setting, credential plumbing, or a
-placeholder service until the provider milestone begins.
+No model service runs in Compose today. The Model settings page can create the
+single supported OpenAI Responses provider record and choose one model for the
+content workflow. It accepts an environment-variable credential reference, not
+the environment value. The current synchronous CLI keeps its explicit model
+selection; a future API run-launch capability will consume the stored setting.
+
+When a later provider adapter needs a local Ollama instance, prefer running it
+as an explicitly documented external service and configure its base URL through
+a bounded provider configuration boundary. A Linux Docker container cannot use
+host `localhost` for that; it normally needs a host-reachable address such as
+`host.docker.internal` when the environment supports it. Do not add the setting
+or a placeholder service until that provider capability exists.
 
 ## Security Boundary
 

@@ -1,11 +1,12 @@
 ---
 title: Runtime API
-description: The read-only, versioned HTTP boundary for durable run history.
+description: The versioned HTTP boundary for durable run history and safe local configuration.
 ---
 
 The runtime API is a FastAPI transport adapter. It calls application services
-that already own run queries; it does not query ORM models, inspect artifact
-directories, construct model providers, or recreate orchestration rules.
+that already own run queries and configuration policy; it does not query ORM
+models from routes, inspect artifact directories, accept provider credentials,
+or recreate orchestration rules.
 
 ## Start locally
 
@@ -28,6 +29,11 @@ OpenAPI is generated at `/openapi.json`, with interactive development docs at
 | `GET /api/v1/runs` | Newest-first keyset-paginated run summaries. |
 | `GET /api/v1/runs/{run_id}` | A safe run detail with stage checkpoints and ordered events. |
 | `GET /api/v1/workflows` | The fixed content workflow definition. |
+| `GET /api/v1/configuration/providers` | Safe provider records, including credential references but never values. |
+| `PUT /api/v1/configuration/providers/{provider_id}` | Create or update the supported provider record. Requires local authorization. |
+| `GET /api/v1/configuration/workflow-models` | Current provider/model assignment per workflow. |
+| `PUT /api/v1/configuration/workflow-models/{workflow_id}` | Set the one permitted model assignment. Requires local authorization. |
+| `GET /api/v1/configuration/audit-events` | Bounded append-only configuration change history. |
 
 `/runs` supports only the filters the query layer already owns: `status`,
 `created_after`, `created_before`, `limit`, and `cursor`. The cursor is opaque;
@@ -36,11 +42,23 @@ the browser returns it unchanged to request the next page.
 There is no separate events endpoint yet. Events are bounded by the current
 run-detail response and have no independent pagination requirement.
 
+## Configuration Writes
+
+Set `PERSONAL_AI_AGENT_ADMIN_TOKEN` in the API environment and send the same
+value in `X-Admin-Token` for either `PUT` route. A missing token disables writes;
+an invalid token returns a generic authorization failure. This is only a local
+development control, not a multi-user authentication scheme.
+
+The only supported provider is `openai_responses`. Its credential field accepts
+an environment reference in the form `env:NAME`; the API rejects credential
+values, arbitrary provider endpoints, and unknown workflow IDs. Every successful
+write creates an audit record without including the referenced environment name.
+
 ## Security boundary
 
-The API is for localhost/development use until authentication and remote
-deployment policy exist. It must not be exposed publicly without an
-authenticated reverse proxy or a later application-auth layer.
+The API is for localhost/development use until real authentication and remote
+deployment policy exist. The local write token protects only this narrow control
+plane and must not be treated as sufficient protection for public exposure.
 
 CORS defaults to the explicit local React origin `http://localhost:5173` and
 does not allow credentials. Configure additional local origins with

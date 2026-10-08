@@ -1,0 +1,27 @@
+---
+title: Provider And Model Configuration
+description: A safe configuration boundary that stores references, not provider secrets.
+---
+
+Phase 4.3 adds the first mutable control-plane capability: selecting the one
+supported provider and model for the `content` workflow.
+
+The important design choice is what it does **not** store. PostgreSQL receives
+provider metadata and an `env:NAME` credential reference, never the provider
+key itself. The browser can inspect that reference, but it cannot inspect the
+environment value it names.
+
+```text
+control plane -> authenticated API -> provider/model records -> env:NAME
+                                                        -> execution-time lookup
+```
+
+Each successful change creates an audit event. The API accepts writes only when
+the request supplies the configured local control token; the React page keeps
+that token in memory instead of browser storage.
+
+This is a local development authorization boundary, not a secret manager or a
+multi-user identity system. The synchronous CLI still has an explicit model
+option, while its provider client is now composed through the same
+provider/credential-reference abstraction. A later API-run-launch milestone can
+make the stored model assignment the execution source of truth.

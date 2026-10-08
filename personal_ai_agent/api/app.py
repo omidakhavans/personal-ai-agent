@@ -21,12 +21,13 @@ def create_app(
         description="Read-only runtime history API for the future operator control plane.",
     )
     app.state.services = services or build_services(resolved_settings)
+    app.state.settings = resolved_settings
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(resolved_settings.cors_origins),
         allow_credentials=False,
-        allow_methods=["GET"],
-        allow_headers=["Content-Type"],
+        allow_methods=["GET", "PUT"],
+        allow_headers=["Content-Type", "X-Admin-Token"],
     )
     install_error_handlers(app)
     app.include_router(router)

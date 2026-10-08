@@ -202,13 +202,15 @@ The static learning site remains separate from the control plane.
 
 #### 3.7 Model, Prompt, Tool, And Credential Configuration
 
-Status: Planned.
+Status: Provider/model foundation complete through Phase 4.3; prompts, tools,
+integration accounts, and credential-vault work remain planned.
 
-Replace direct provider construction in the CLI with application-level model
-selection and provider ports. Add model settings, versioned prompts, tool
-configuration, integration accounts, and encrypted credential storage. Initial
-scope is one configured model per stage or workflow; routing and evaluation
-experiments come later.
+The runtime now has a provider-client factory that resolves only environment
+credential references at execution time. PostgreSQL stores safe provider
+metadata and one provider/model selection for the `content` workflow, while an
+append-only audit trail records authenticated changes. The API never accepts or
+returns provider credential values. The current synchronous CLI retains its
+explicit model argument; API-driven run launch is deliberately deferred.
 
 #### 3.8 Publishing Foundation And WordPress
 
@@ -254,15 +256,14 @@ search; it is not a default platform dependency.
 
 ## Next Phase 3 Implementation Task
 
-**Phase 4.3 — Provider, Model, And Credential Control Plane.**
+**Phase 3.8 / 4.4 — Publishing Foundation And WordPress Draft Integration.**
 
-The local topology and read-only control plane are now stable enough to add the
-next missing application boundary: a provider/model configuration port with
-credential *references*, never raw values exposed through the API or browser.
-This should begin with one configured model per stage or workflow, explicit
-validation, audit records, and an authenticated write policy. Do not add a
-worker, Redis, or publishing integration in that task; those need a real
-asynchronous execution or external-action use case.
+The provider/model boundary is now complete enough for the next external-action
+boundary: a publisher port, content statuses, publication records, explicit
+confirmation, and a WordPress adapter that creates a draft or preview only.
+Do not add LinkedIn/X publishing, a worker, or Redis in that task. First prove
+the approval, audit, idempotency, and retry semantics against one draft-only
+publisher.
 
 ## Phase 4: Admin GUI / Agent Control Plane
 
@@ -291,6 +292,17 @@ Status: Complete.
 checks, migration-before-API startup, and local operations documentation run
 the actual stack: PostgreSQL, FastAPI, React admin, and learning site. No
 placeholder Redis, worker, model service, or publisher was added.
+
+### Phase 4.3 — Provider, Model, And Credential-Reference Control Plane
+
+Status: Complete.
+
+The local control plane can safely create/update the single supported provider
+record (`openai_responses`) and assign one model to the `content` workflow.
+Credential values never cross the browser, HTTP, database, audit, or artifact
+boundaries: only `env:NAME` references are accepted. Mutations require a
+local control token and append an audit event. This is local authorization, not
+a replacement for a future multi-user identity and credential-vault system.
 
 ## Future-Session Handoff
 

@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from os import environ
 from pathlib import Path
+from secrets import compare_digest
 from typing import cast
 
 from fastapi import Request
@@ -15,7 +16,12 @@ from ..application import (
     RunHistoryApplicationService,
     RuntimeMetadataApplicationService,
 )
-from ..postgres import SqlAlchemyRunQueryService, SqlAlchemyRunRepository
+from ..configuration import ConfigurationApplicationService
+from ..postgres import (
+    SqlAlchemyConfigurationRepository,
+    SqlAlchemyRunQueryService,
+    SqlAlchemyRunRepository,
+)
 from ..run_queries import RunDetail, RunListFilters, RunPage, RunQueryService
 from .errors import ApiDependencyUnavailableError
 
@@ -27,6 +33,7 @@ class ApiSettings:
     database_url: str | None
     artifact_root: Path
     cors_origins: tuple[str, ...]
+    admin_token: str | None = None
 
     @classmethod
     def from_environment(cls) -> ApiSettings:
@@ -42,6 +49,7 @@ class ApiSettings:
             database_url=environ.get("PERSONAL_AI_AGENT_DATABASE_URL"),
             artifact_root=Path(environ.get("PERSONAL_AI_AGENT_ARTIFACT_ROOT", "runs")),
             cors_origins=origins,
+            admin_token=environ.get("PERSONAL_AI_AGENT_ADMIN_TOKEN"),
         )
 
 
@@ -66,6 +74,7 @@ class ApiServices:
     run_history: RunHistoryApplicationService
     runtime_metadata: RuntimeMetadataApplicationService
     readiness: Callable[[], bool]
+    configuration: ConfigurationApplicationService | None = None
 
 
 def build_services(settings: ApiSettings) -> ApiServices:
@@ -75,6 +84,7 @@ def build_services(settings: ApiSettings) -> ApiServices:
         return ApiServices(
             run_history=RunHistoryApplicationService(UnavailableRunQueryService()),
             runtime_metadata=metadata,
+            configuration=None,
             readiness=lambda: False,
         )
     repository = SqlAlchemyRunRepository(
@@ -84,6 +94,7 @@ def build_services(settings: ApiSettings) -> ApiServices:
     return ApiServices(
         run_history=RunHistoryApplicationService(SqlAlchemyRunQueryService(repository)),
         runtime_metadata=metadata,
+        configuration=ConfigurationApplicationService(SqlAlchemyConfigurationRepository(repository)),
         readiness=lambda: _database_ready(repository),
     )
 
@@ -91,6 +102,19 @@ def build_services(settings: ApiSettings) -> ApiServices:
 def get_services(request: Request) -> ApiServices:
     """Retrieve application services placed on the app during composition."""
     return cast(ApiServices, request.app.state.services)
+
+
+def require_configuration_write(request: Request) -> str:
+    """Authorize local configuration writes without accepting provider secrets."""
+    settings = cast(ApiSettings, request.app.state.settings)
+    token = request.headers.get("X-Admin-Token")
+    if not settings.admin_token:
+        raise ApiDependencyUnavailableError("Configuration writes are disabled.")
+    if not token or not compare_digest(token, settings.admin_token):
+        from .errors import ApiAuthorizationError
+
+        raise ApiAuthorizationError("A valid local admin token is required.")
+    return "local-admin"
 
 
 def _database_ready(repository: SqlAlchemyRunRepository) -> bool:

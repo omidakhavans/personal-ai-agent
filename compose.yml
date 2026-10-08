@@ -24,6 +24,7 @@ services:
       PERSONAL_AI_AGENT_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       PERSONAL_AI_AGENT_ARTIFACT_ROOT: /var/lib/personal-ai-agent/artifacts
       PERSONAL_AI_AGENT_CORS_ORIGINS: ${PERSONAL_AI_AGENT_CORS_ORIGINS}
+      PERSONAL_AI_AGENT_ADMIN_TOKEN: ${PERSONAL_AI_AGENT_ADMIN_TOKEN}
     ports:
       - "${API_PORT}:8000"
     volumes:
